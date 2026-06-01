@@ -592,6 +592,20 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   -- scanner even in a skipped (false) branch, throwing off the \if/\fi balance.
   -- Solution: use \if@twoside directly, with \makeatletter/\makeatother in the
   -- shipout hook argument for runtime access.
+  --
+  -- The page widening itself is deferred to \AtBeginDocument. If the host loads
+  -- geometry, it freezes \textwidth and the margins from \paperwidth at
+  -- \AtEndPreamble. Enlarging \paperwidth in the preamble would make geometry
+  -- recompute the text block from the already-widened paper, shifting the text
+  -- block instead of leaving it in place. Deferring to \AtBeginDocument
+  -- guarantees geometry reads the ORIGINAL \paperwidth, so the text block stays
+  -- put with OR without geometry. We then bump BOTH registers:
+  --   physical page primitive — \pdfpagewidth (pdfTeX/XeTeX) or \pagewidth (LuaTeX),
+  --                             each guarded by \ifdefined so the unused one is skipped
+  --   \paperwidth   — the reference of pgf/TikZ's `current page` node (and, on
+  --                   LuaTeX, what the kernel syncs the physical page from)
+  -- Without the \paperwidth bump, the TikZ background would draw at the old
+  -- width and the grey zone would land over the text.
   local geom = table.concat({
     "\\makeatletter",                                -- outside guard, always runs
     "\\ifx\\qtc@widemargins@done\\undefined",
@@ -602,19 +616,27 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "\\setlength{\\qtcInnerPad}{" .. inner_pad .. "}%",
     "\\colorlet{qtcFrameColor}{" .. frame_color .. "}%",
     "\\colorlet{qtcLineColor}{" .. frame_line .. "}%",
-    -- Extend paper and marginpar width; on twoside shift even-page text so
-    -- the outer annotation margin grows while the inner binding margin is kept.
-    "\\if@twoside",
-    "  \\paperwidth=\\dimexpr\\paperwidth+\\qtcExtraMargin\\relax",
-    "  \\evensidemargin=\\dimexpr\\evensidemargin+\\qtcExtraMargin\\relax",
-    "\\else",
-    "  \\paperwidth=\\dimexpr\\paperwidth+\\qtcExtraMargin\\relax",
-    "\\fi",
+    -- Defer the widening so geometry (if present) freezes the text block from
+    -- the ORIGINAL paper width. On twoside, grow the outer margin only so the
+    -- inner binding margin is kept; even pages put the annotation zone on the
+    -- left (handled by the TikZ background below).
+    "\\AtBeginDocument{%",
+    "  \\makeatletter",
+    -- Widen the physical page via the engine-specific primitive (guarded so the
+    -- one absent on the current engine is silently skipped).
+    "  \\ifdefined\\pdfpagewidth\\addtolength{\\pdfpagewidth}{\\qtcExtraMargin}\\fi%",
+    "  \\ifdefined\\pagewidth\\addtolength{\\pagewidth}{\\qtcExtraMargin}\\fi%",
+    "  \\if@twoside",
+    "    \\addtolength{\\evensidemargin}{\\qtcExtraMargin}%",
+    "  \\fi",
+    "  \\addtolength{\\paperwidth}{\\qtcExtraMargin}%",
     -- Place notes inside the grey zone with inner_pad breathing room on each side.
     -- marginparsep = original right margin + inner_pad (left padding inside grey zone)
     -- marginparwidth = qtcExtraMargin - 2*inner_pad (right padding included)
-    "\\setlength{\\marginparsep}{\\dimexpr\\paperwidth-\\qtcExtraMargin-\\textwidth-\\oddsidemargin-1in+\\qtcInnerPad\\relax}%",
-    "\\setlength{\\marginparwidth}{\\dimexpr\\qtcExtraMargin-2\\qtcInnerPad\\relax}%",
+    "  \\setlength{\\marginparsep}{\\dimexpr\\paperwidth-\\qtcExtraMargin-\\textwidth-\\oddsidemargin-1in+\\qtcInnerPad\\relax}%",
+    "  \\setlength{\\marginparwidth}{\\dimexpr\\qtcExtraMargin-2\\qtcInnerPad\\relax}%",
+    "  \\makeatother",
+    "}%",
   }, "\n")
 
   -- TikZ background: grey zone + dashed separator + "Comments" label.
