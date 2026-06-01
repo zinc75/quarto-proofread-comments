@@ -8,6 +8,7 @@ extensions:
     enabled: true
     show_author: true
     show_list: true
+    wide_margins: false
     authors:
       vg:
         name: "Vincent"
@@ -15,31 +16,24 @@ extensions:
         name: "Clara"
 ---
 
-This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs.
-
-{{< comment "Consider adding a motivating example in the introduction." author="vg" >}}
+This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs. {{< comment "Consider adding a motivating example in the introduction." author="vg" >}}
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
 ### Model Overview
 
-We summarise the modelling approach in this section. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+We summarise the modelling approach in this section. {{< todo "Update parameter estimates once the latest run finishes." author="cg" >}} Duis aute irure dolor {{< comment "I don't agree with Vincent's comment. Let's discuss it together." author="vg" >}} in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
 
-{{< todo "Update parameter estimates once the latest run finishes." author="cg" >}}
 
 Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.
 
 Totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.
 
-Discussion continues inline{{< question "Do we need to cite Smith (2024) here?" author="vg" inline=true >}}while keeping the flow of the paragraph. Sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
-
-{{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
+Discussion continues inline {{< question "Do we need to cite Smith (2024) here?" author="vg" inline=true >}} while keeping the flow of the paragraph. Sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. {{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
 
 ### Analysis
 
-Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
-
-{{< question "Should we add a sensitivity analysis section?" author="cg" >}}
+Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. {{< question "Should we add a sensitivity analysis section?" author="cg" >}}
 
 Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur. Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur.
 
