@@ -761,9 +761,15 @@ function utils.render(args, kwargs, meta, forced_type)
         quarto.doc.include_text("in-header", "\\tcbuselibrary{skins,breakable}\n")
         -- Wrap \listoftodos in a styled tcolorbox: grey background, dashed
         -- border with rounded corners. Guard against multiple injections.
+        -- Output the section title outside the box, then wrap only the list
+        -- content (\@starttoc{tdo}) in the tcolorbox so the title is not
+        -- enclosed in the grey frame.
         quarto.doc.include_text("before-body",
           "\\makeatletter\\ifx\\@qtc@listoftodos@done\\undefined" ..
           "\\gdef\\@qtc@listoftodos@done{}" ..
+          "\\@ifundefined{chapter}" ..
+          "{\\section*{\\@todonotes@todolistname}}" ..
+          "{\\chapter*{\\@todonotes@todolistname}}" ..
           "\\begin{tcolorbox}[enhanced," ..
           "colback={" .. fc .. "}," ..
           "colframe=white," ..
@@ -771,7 +777,7 @@ function utils.render(args, kwargs, meta, forced_type)
           "borderline={0.5pt}{0pt}{{" .. fl .. "},dashed}," ..
           "left=8pt,right=8pt,top=6pt,bottom=6pt," ..
           "breakable]" ..
-          "\\listoftodos" ..
+          "\\@starttoc{tdo}" ..
           "\\end{tcolorbox}" ..
           "\\fi\\makeatother\n")
       end

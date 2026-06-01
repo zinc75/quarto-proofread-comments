@@ -8,7 +8,7 @@ extensions:
     enabled: true
     show_author: true
     show_list: true
-    wide_margins: false
+    wide_margins: true
     authors:
       vg:
         name: "Vincent"
