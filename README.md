@@ -60,9 +60,11 @@ format:
   pdf: default
 extensions:
   quarto-comments:
-    enabled: true       # toggle comments globally (default: true)
-    show_author: true   # show author labels (default: true)
-    show_list: true     # prepend a list of all comments in PDF (default: false)
+    enabled: true         # toggle comments globally (default: true)
+    show_author: true     # show author labels (default: true)
+    show_list: true       # prepend a styled list of all comments in PDF (default: false)
+    wide_margins: true    # extend page width for a dedicated annotation zone (default: false)
+    # extra_margin: "6.5cm" # width added to the page (default: 6.5cm)
     authors:
       vg:
         name: "Vincent"
@@ -93,6 +95,28 @@ authors:
 - `show_author: false` hides author labels on all comments.
 - Anonymous comments (no `author`) automatically suppress author labels.
 
+### Draft layout (PDF)
+
+Set `wide_margins: true` to extend the physical page width and reserve a dedicated annotation zone at the outer edge. The text body is completely unchanged — only extra paper is added to accommodate the notes.
+
+```yaml
+extensions:
+  quarto-comments:
+    wide_margins: true
+    # extra_margin: "6.5cm"  # total width added to the page (default: 6.5cm)
+    # inner_pad: "0.3cm"     # breathing room inside the zone on each side (default: 0.3cm)
+    # frame_color: "gray!10" # background fill of the annotation zone (default: gray!10)
+    # frame_line: "gray!60"  # colour of the dashed separator line (default: gray!60)
+```
+
+The annotation zone is displayed with a light grey background and a dashed vertical separator marking the original page boundary. A "Comments" label appears at the top of the zone.
+
+**One-sided documents**: the annotation zone always appears on the right.
+
+**Two-sided documents** (`classoption: twoside`): the zone alternates sides — right on odd (recto) pages, left on even (verso) pages — so it always sits at the outer edge, away from the binding.
+
+Setting `enabled: false` restores the original page layout for final output — no trace of the annotation zone remains.
+
 ## Output Behaviour
 
 ### HTML
@@ -105,9 +129,11 @@ authors:
 
 - Comments render via the [`todonotes`](https://ctan.org/pkg/todonotes) package; inline comments use `\todo[inline]{...}`.
 - Required LaTeX packages (`xcolor`, `todonotes`, `fontawesome5`) are injected automatically — no manual `include-in-header` needed.
-- Icons use [Font Awesome 5](https://ctan.org/pkg/fontawesome5), compatible with pdflatex, xelatex, and lualatex.
-- Author colours are defined dynamically via `\definecolor`.
-- **List of comments**: set `show_list: true` in the configuration to prepend a clickable list of all margin comments to the PDF. Inline comments are excluded from the list.
+- Icons use [Font Awesome 5](https://ctan.org/pkg/fontawesome5) in outline (regular) style, compatible with pdflatex, xelatex, and lualatex.
+- Author colours are applied to the note background, border, and connecting line.
+- The connection between a comment anchor and its margin note is a smooth Bézier curve with a hollow circle at the text position.
+- **List of comments**: set `show_list: true` to prepend a styled, clickable list of all margin comments (rounded dashed frame). Inline comments are excluded.
+- **Draft layout**: set `wide_margins: true` to extend the page and give notes a dedicated, clearly delimited zone — see [Draft layout (PDF)](#draft-layout-pdf).
 
 ### Other Formats
 

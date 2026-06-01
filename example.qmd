@@ -9,6 +9,10 @@ extensions:
     show_author: true
     show_list: true
     wide_margins: true
+    # extra_margin: "6.5cm"   # width added to the page for the annotation zone (default: 6.5cm)
+    # inner_pad: "0.3cm"      # padding inside the annotation zone on each side (default: 0.3cm)
+    # frame_color: "gray!10"  # background of the annotation zone (default: gray!10)
+    # frame_line: "gray!60"   # colour of the dashed separator (default: gray!60)
     authors:
       vg:
         name: "Vincent"
@@ -16,25 +20,69 @@ extensions:
         name: "Clara"
 ---
 
-This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs. {{< comment "Consider adding a motivating example in the introduction." author="vg" >}}
+This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs.
+Comments are inserted with shortcodes and render as margin callouts (HTML) or `todonotes` margin notes (PDF).
+Set `enabled: false` in the configuration to strip all annotations for final submission.
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+{{< comment "Consider adding a motivating example in the introduction." author="vg" >}}
 
-### Model Overview
+## Introduction
 
-We summarise the modelling approach in this section. {{< todo "Update parameter estimates once the latest run finishes." author="cg" >}} Duis aute irure dolor {{< comment "I don't agree with Vincent's comment. Let's discuss it together." author="vg" >}} in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
+{{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
 
-Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-Totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.
+{{< comment "Section needs a stronger motivation paragraph." >}}
 
-Discussion continues inline {{< question "Do we need to cite Smith (2024) here?" author="vg" inline=true >}} while keeping the flow of the paragraph. Sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. {{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
+Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium,
+totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae
+dicta sunt explicabo.
 
-### Analysis
+## Model Overview
 
-Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. {{< question "Should we add a sensitivity analysis section?" author="cg" >}}
+We summarise the modelling approach in this section.
 
-Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur. Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur.
+{{< todo "Update parameter estimates once the latest run finishes." author="cg" >}}
 
-When the manuscript is ready for submission, set `comments.enabled: false` in the configuration to strip all annotations.
+Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
+sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
+
+Discussion continues inline{{< question "Do we need to cite Smith (2024) here?" author="vg" inline=true >}} while keeping the flow of the paragraph.
+Ut labore et dolore magnam aliquam quaerat voluptatem.
+
+{{< comment "I don't agree with this interpretation. Let's discuss." author="cg" >}}
+
+Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam,
+nisi ut aliquid ex ea commodi consequatur.
+Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur.
+
+## Analysis
+
+{{< question "Should we add a sensitivity analysis section?" author="cg" >}}
+
+At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum
+deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.
+
+{{< todo "Check this result against the reference implementation." author="sm" >}}
+
+Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.
+Et harum quidem rerum facilis est et expedita distinctio.
+
+Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod
+maxime placeat facere possimus, omnis voluptas assumenda est, omnis dolor repellendus.
+
+## Conclusion
+
+Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et
+voluptates repudiandae sint et molestiae non recusandae.
+
+{{< note "Cross-check references before submission." author="vg" >}}
+
+Itaque earum rerum hic tenetur a sapiente delectus, ut aut reiciendis voluptatibus maiores alias
+consequatur aut perferendis doloribus asperiores repellat.
