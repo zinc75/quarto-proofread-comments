@@ -116,6 +116,8 @@ extensions:
 
 The annotation zone is displayed with a light grey background and a dashed vertical separator marking the original page boundary. A "Comments" label appears at the top of the zone.
 
+This works whether or not the document loads the [`geometry`](https://ctan.org/pkg/geometry) package: the text block keeps exactly the position and width that `geometry` (or the default layout) assigns it — only extra paper and the annotation zone are added beyond it.
+
 **One-sided documents**: the annotation zone always appears on the right.
 
 **Two-sided documents** (`classoption: twoside`): the zone alternates sides — right on odd (recto) pages, left on even (verso) pages — so it always sits at the outer edge, away from the binding.
