@@ -11,6 +11,36 @@ local FA_CSS_LINK = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/a
 local _fa_css_injected = false
 local _listoftodos_injected = false
 local _latex_tdo_cleared = false
+local _latex_wide_margins_injected = false
+local _latex_bezier_injected = false
+
+-- Replaces todonotes' default right-angle connector with a smooth Bézier curve
+-- and thinner stroke. Uses \@todonotes@currentlinecolor so it inherits the
+-- per-note linecolor option (= author's base colour).
+local BEZIER_CONNECTION_LATEX = [[
+\makeatletter
+\renewcommand{\@todonotes@drawLineToRightMargin}{%
+  \if@todonotes@line%
+  \begin{tikzpicture}[remember picture,overlay]%
+    \node[circle,draw=\@todonotes@currentlinecolor,fill=white,%
+          minimum size=4pt,inner sep=0pt,line width=1pt,outer sep=2pt]%
+      (todoanch) at ([yshift=-0.25cm,xshift=-0.1cm]inText) {};%
+    \draw[draw=\@todonotes@currentlinecolor,line width=0.5pt,dashed]%
+      (todoanch) to[out=0,in=180] (inNote.west);%
+  \end{tikzpicture}%
+  \fi}%
+\renewcommand{\@todonotes@drawLineToLeftMargin}{%
+  \if@todonotes@line%
+  \begin{tikzpicture}[remember picture,overlay]%
+    \node[circle,draw=\@todonotes@currentlinecolor,fill=white,%
+          minimum size=4pt,inner sep=0pt,line width=1pt,outer sep=2pt]%
+      (todoanch) at ([yshift=-0.25cm,xshift=-0.1cm]inText) {};%
+    \draw[draw=\@todonotes@currentlinecolor,line width=0.5pt,dashed]%
+      (todoanch) to[out=180,in=0] (inNote.east);%
+  \end{tikzpicture}%
+  \fi}%
+\makeatother
+]]
 
 local VALID_TYPES = {
   comment = true,
@@ -74,17 +104,17 @@ local CALLOUT_VARIANTS = {
 }
 
 local COMMENT_ICONS = {
-  comment  = '<i class="fa-solid fa-comment"></i>',
-  todo     = '<i class="fa-solid fa-pen-to-square"></i>',
-  note     = '<i class="fa-solid fa-thumbtack"></i>',
-  question = '<i class="fa-solid fa-circle-question"></i>',
+  comment  = '<i class="fa-regular fa-comment"></i>',
+  todo     = '<i class="fa-regular fa-pen-to-square"></i>',
+  note     = '<i class="fa-regular fa-bell"></i>',
+  question = '<i class="fa-regular fa-circle-question"></i>',
 }
 
 local LATEX_FA_ICONS = {
-  comment  = "\\faComment{}",
-  todo     = "\\faEdit{}",
-  note     = "\\faThumbtack{}",
-  question = "\\faQuestionCircle{}",
+  comment  = "\\faComment[regular]{}",
+  todo     = "\\faEdit[regular]{}",
+  note     = "\\faBell[regular]{}",
+  question = "\\faQuestionCircle[regular]{}",
 }
 
 local function sanitize_class(value)
@@ -172,6 +202,11 @@ local function get_config(meta)
     enabled = true,
     show_author = true,
     show_list = false,
+    wide_margins = false,
+    extra_margin = "6.5cm",
+    inner_pad = "0.3cm",
+    frame_color = "gray!10",
+    frame_line = "gray!60",
     authors = {},
   }
 
@@ -200,6 +235,23 @@ local function get_config(meta)
     if show_list ~= nil then
       config.show_list = show_list
     end
+  end
+
+  if config_meta.wide_margins ~= nil then
+    local wm = meta_to_bool(config_meta.wide_margins)
+    if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.extra_margin then
+    config.extra_margin = meta_to_string(config_meta.extra_margin)
+  end
+  if config_meta.inner_pad then
+    config.inner_pad = meta_to_string(config_meta.inner_pad)
+  end
+  if config_meta.frame_color then
+    config.frame_color = meta_to_string(config_meta.frame_color)
+  end
+  if config_meta.frame_line then
+    config.frame_line = meta_to_string(config_meta.frame_line)
   end
 
   if config_meta.authors then
@@ -489,10 +541,13 @@ local function build_latex(comment_type, comment_text, author, inline, config)
     -- For plain color names (auto-assigned via \definecolor), dilute the
     -- background so the note stays light; user-defined tints (e.g. "blue!20")
     -- are used as-is since they already carry the desired opacity.
+    local base_color = latex_color:match("^([^!]+)") or latex_color
     local bg_color = latex_color:find("!", 1, true)
       and latex_color
       or  (latex_color .. "!20!white")
     table.insert(options, "color=" .. bg_color)
+    table.insert(options, "bordercolor=" .. base_color)
+    table.insert(options, "linecolor=" .. base_color)
   end
   local option_string = ""
   table.insert(options, "size=\\footnotesize")
@@ -502,8 +557,9 @@ local function build_latex(comment_type, comment_text, author, inline, config)
 
   local pieces = {}
 
-  -- Icon: use full (or base) color for contrast against the diluted background
-  local icon_color = latex_color:match("^([^!]+)") or latex_color
+  -- Icon: dilute the base color to 60% so the outline icon looks lighter
+  -- and less visually heavy than a fully saturated glyph in print output.
+  local icon_color = (latex_color:match("^([^!]+)") or latex_color) .. "!70"
   local fa_cmd = LATEX_FA_ICONS[comment_type] or LATEX_FA_ICONS.comment
   local emoji_cmd = "\\textcolor{" .. icon_color .. "}{" .. fa_cmd .. "}"
   table.insert(pieces, emoji_cmd .. " ")
@@ -521,6 +577,97 @@ local function build_latex(comment_type, comment_text, author, inline, config)
   else
     return pandoc.RawBlock("tex", todo)
   end
+end
+
+-- Build the LaTeX preamble snippet that widens the page for draft margin notes.
+-- Guards against multiple injections with a LaTeX-level flag so it is safe to
+-- call once per shortcode type (up to 4 times per document).
+local function build_wide_margins_header(extra_margin, inner_pad, frame_color, frame_line)
+  -- \makeatletter is placed OUTSIDE the \ifx guard so that \if@twoside (which
+  -- requires @ to be a letter) is accessible in the guard body.
+  -- \makeatother is placed AFTER \fi so it always runs regardless of branch.
+  --
+  -- IMPORTANT: \newif\ifFOO must NOT appear inside an \ifx...\fi guard because
+  -- \ifFOO (starting with \if) is counted as an \if token by TeX's conditional
+  -- scanner even in a skipped (false) branch, throwing off the \if/\fi balance.
+  -- Solution: use \if@twoside directly, with \makeatletter/\makeatother in the
+  -- shipout hook argument for runtime access.
+  local geom = table.concat({
+    "\\makeatletter",                                -- outside guard, always runs
+    "\\ifx\\qtc@widemargins@done\\undefined",
+    "\\gdef\\qtc@widemargins@done{}%",
+    "\\newlength{\\qtcExtraMargin}%",
+    "\\setlength{\\qtcExtraMargin}{" .. extra_margin .. "}%",
+    "\\newlength{\\qtcInnerPad}%",
+    "\\setlength{\\qtcInnerPad}{" .. inner_pad .. "}%",
+    "\\colorlet{qtcFrameColor}{" .. frame_color .. "}%",
+    "\\colorlet{qtcLineColor}{" .. frame_line .. "}%",
+    -- Extend paper and marginpar width; on twoside shift even-page text so
+    -- the outer annotation margin grows while the inner binding margin is kept.
+    "\\if@twoside",
+    "  \\paperwidth=\\dimexpr\\paperwidth+\\qtcExtraMargin\\relax",
+    "  \\evensidemargin=\\dimexpr\\evensidemargin+\\qtcExtraMargin\\relax",
+    "\\else",
+    "  \\paperwidth=\\dimexpr\\paperwidth+\\qtcExtraMargin\\relax",
+    "\\fi",
+    -- Place notes inside the grey zone with inner_pad breathing room on each side.
+    -- marginparsep = original right margin + inner_pad (left padding inside grey zone)
+    -- marginparwidth = qtcExtraMargin - 2*inner_pad (right padding included)
+    "\\setlength{\\marginparsep}{\\dimexpr\\paperwidth-\\qtcExtraMargin-\\textwidth-\\oddsidemargin-1in+\\qtcInnerPad\\relax}%",
+    "\\setlength{\\marginparwidth}{\\dimexpr\\qtcExtraMargin-2\\qtcInnerPad\\relax}%",
+  }, "\n")
+
+  -- TikZ background: grey zone + dashed separator + "Comments" label.
+  -- \makeatletter/\makeatother inside the hook argument gives \if@twoside
+  -- access at shipout time. The \if@twoside..\fi pairs are balanced so the
+  -- false-branch scan of the outer \ifx guard remains correct.
+  local frame = [[
+\RequirePackage{eso-pic}%
+\usetikzlibrary{calc}%
+\AddToShipoutPictureBG{%
+  \makeatletter
+  \begin{tikzpicture}[remember picture,overlay]
+    \if@twoside
+      \ifodd\value{page}
+        \fill[qtcFrameColor]
+          ([xshift=-\qtcExtraMargin]current page.north east)
+          rectangle (current page.south east);
+        \draw[dashed,qtcLineColor,line width=0.5pt]
+          ([xshift=-\qtcExtraMargin]current page.north east) --
+          ([xshift=-\qtcExtraMargin]current page.south east);
+        \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+          at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
+          {Comments};
+      \else
+        \fill[qtcFrameColor]
+          (current page.north west)
+          rectangle ([xshift=\qtcExtraMargin]current page.south west);
+        \draw[dashed,qtcLineColor,line width=0.5pt]
+          ([xshift=\qtcExtraMargin]current page.north west) --
+          ([xshift=\qtcExtraMargin]current page.south west);
+        \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+          at ($(current page.north west)+(0.5*\qtcExtraMargin,0)$)
+          {Comments};
+      \fi
+    \else
+      \fill[qtcFrameColor]
+        ([xshift=-\qtcExtraMargin]current page.north east)
+        rectangle (current page.south east);
+      \draw[dashed,qtcLineColor,line width=0.5pt]
+        ([xshift=-\qtcExtraMargin]current page.north east) --
+        ([xshift=-\qtcExtraMargin]current page.south east);
+      \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+        at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
+        {Comments};
+    \fi
+  \end{tikzpicture}%
+  \makeatother
+}%
+\fi% closes \ifx\qtc@widemargins@done\undefined
+\makeatother% outer \makeatother — always runs
+]]
+
+  return geom .. "\n" .. frame
 end
 
 function utils.render(args, kwargs, meta, forced_type)
@@ -608,10 +755,44 @@ function utils.render(args, kwargs, meta, forced_type)
       end
       if config.show_list and not _listoftodos_injected then
         _listoftodos_injected = true
-        -- Guard against multiple injections (one per shortcode type loaded)
+        local fc = config.frame_color
+        local fl = config.frame_line
+        quarto.doc.use_latex_package("tcolorbox")
+        quarto.doc.include_text("in-header", "\\tcbuselibrary{skins,breakable}\n")
+        -- Wrap \listoftodos in a styled tcolorbox: grey background, dashed
+        -- border with rounded corners. Guard against multiple injections.
+        -- Output the section title outside the box, then wrap only the list
+        -- content (\@starttoc{tdo}) in the tcolorbox so the title is not
+        -- enclosed in the grey frame.
         quarto.doc.include_text("before-body",
           "\\makeatletter\\ifx\\@qtc@listoftodos@done\\undefined" ..
-          "\\gdef\\@qtc@listoftodos@done{}\\listoftodos\\fi\\makeatother\n")
+          "\\gdef\\@qtc@listoftodos@done{}" ..
+          "\\@ifundefined{chapter}" ..
+          "{\\section*{\\@todonotes@todolistname}}" ..
+          "{\\chapter*{\\@todonotes@todolistname}}" ..
+          "\\begin{tcolorbox}[enhanced," ..
+          "colback={" .. fc .. "}," ..
+          "colframe=white," ..
+          "arc=5pt," ..
+          "borderline={0.5pt}{0pt}{{" .. fl .. "},dashed}," ..
+          "left=8pt,right=8pt,top=6pt,bottom=6pt," ..
+          "breakable]" ..
+          "\\@starttoc{tdo}" ..
+          "\\end{tcolorbox}" ..
+          "\\fi\\makeatother\n")
+      end
+      if not _latex_bezier_injected then
+        _latex_bezier_injected = true
+        quarto.doc.include_text("in-header", BEZIER_CONNECTION_LATEX)
+      end
+      if config.wide_margins and not _latex_wide_margins_injected then
+        _latex_wide_margins_injected = true
+        quarto.doc.include_text("in-header",
+          build_wide_margins_header(
+            config.extra_margin,
+            config.inner_pad,
+            config.frame_color,
+            config.frame_line))
       end
     end)
     return build_latex(comment_type, comment_text, author, inline, config)
