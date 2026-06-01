@@ -75,9 +75,15 @@ extensions:
 
 ### Author colours
 
-Authors do not need to be declared in the configuration. Any identifier used in a shortcode (`author="jd"`) automatically receives a distinct colour derived from that value. Declaring an author under `authors:` lets you attach a display name and optionally override the colour — nothing more.
+Three cases:
 
-Each author is automatically assigned a distinct colour drawn from the Bootstrap 5 palette, derived from their name. No manual colour configuration is required.
+| Shortcode | Display name | Colour |
+|-----------|-------------|--------|
+| `author="vg"` declared in `authors:` | value of `name:` | auto-assigned from Bootstrap 5 palette, or manual override |
+| `author="sm"` **not** declared in `authors:` | `sm` (the identifier itself) | auto-assigned from Bootstrap 5 palette |
+| no `author` | *(none — label suppressed)* | default colour for the comment type |
+
+Auto-assignment derives a distinct colour from the author's name using a hash into the Bootstrap 5 base palette (blue, indigo, purple, pink, red, orange, yellow, green, teal, cyan). No manual configuration is required.
 
 To override, add `color_html` (CSS hex) and/or `color_latex` (xcolor spec) to the author entry:
 
@@ -93,7 +99,6 @@ authors:
 
 - `enabled: false` strips all comment shortcodes from the output.
 - `show_author: false` hides author labels on all comments.
-- Anonymous comments (no `author`) automatically suppress author labels.
 
 ### Draft layout (PDF)
 
