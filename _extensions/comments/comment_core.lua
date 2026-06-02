@@ -14,31 +14,100 @@ local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
 
--- Replaces todonotes' default right-angle connector with a smooth Bézier curve
--- and thinner stroke. Uses \@todonotes@currentlinecolor so it inherits the
--- per-note linecolor option (= author's base colour).
+-- Replaces todonotes' default right-angle connector with a smooth dashed curve
+-- and thinner stroke. Two refinements over a naive inline redefinition:
+--
+--   * Anchoring: the curve targets the TOP of the note box (its icon/author
+--     line) rather than its vertical centre — north west for right-margin notes,
+--     north east for left-margin notes, dropped 3mm to land on the first line.
+--
+--   * Z-order: LaTeX has no z-index, and todonotes draws its connector inside
+--     the margin box, whose specials can be painted over by boxes typeset
+--     afterwards (tcolorbox callouts, code blocks, figures). We instead replay
+--     the stroke in the shipout FOREGROUND (eso-pic FG), composited above all
+--     page content.
+--
+-- Why this is non-trivial:
+--   - todonotes positions notes with \marginpar[left]{right}, and the LaTeX
+--     kernel typesets BOTH arguments into save-boxes; only the side that matches
+--     the page is actually shipped. So both drawLineTo{Left,Right}Margin run for
+--     every note, but only one margin box ever reaches a page.
+--   - Inside a save-box there is no current page, so coordinates cannot be
+--     measured there (they collapse to the origin → connectors swoop to a
+--     corner). And todonotes reuses the names inText/inNote for every note.
+--
+-- Solution: each side macro only creates per-note, uniquely-named coordinate
+-- nodes (qtc@t@N at inText, qtc@{l,r}@N at the box's top corner) keyed by
+-- todonotes' own note counter, and queues a draw for that side. The connectors
+-- are queued as the margin box is built, so they are replayed on the page that
+-- carries them (the per-page FG hook clears the queue each shipout). At shipout,
+-- where the recorded nodes are valid, the FG hook replays only the side matching
+-- this page's margin — right on a oneside doc or an odd page, left on an even
+-- (verso) twoside page — which is exactly the side the kernel placed and thus
+-- the only one whose note node was shipped. The curve direction is fixed per
+-- side. This relies only on the two passes `remember picture` already needs.
+--
+-- Guarded by \ifx\qtc@bezier@done so the definitions run once even though the
+-- snippet is included once per shortcode type. All \if...\fi pairs below are
+-- balanced so the skipped-branch scan of the guard stays correct.
 local BEZIER_CONNECTION_LATEX = [[
 \makeatletter
+\ifx\qtc@bezier@done\undefined
+\gdef\qtc@bezier@done{}%
+\RequirePackage{eso-pic}
+\gdef\qtc@connlist{}
+% Draw the connectors queued for the current page in the shipout foreground,
+% then clear the queue. Connectors are queued as their margin box is built
+% (i.e. during the page that carries them), so each page draws only its own —
+% a remember-picture node referenced from another page does NOT clip cleanly.
+% Before replaying, decide which margin this page uses (the same rule the kernel
+% uses to place \marginpar): the right margin on a oneside document or an odd
+% (recto) page, the left margin on an even (verso) page of a twoside document.
+% Only that side's note node was actually shipped/recorded.
+\AddToShipoutPictureFG{%
+  \makeatletter
+  \if@twoside\ifodd\c@page\gdef\qtc@want{r}\else\gdef\qtc@want{l}\fi
+  \else\gdef\qtc@want{r}\fi
+  \qtc@connlist\gdef\qtc@connlist{}%
+  \makeatother
+}%
+% Replay one connector. #1 note id, #2 side (l/r), #3 out-angle, #4 in-angle.
+% The LaTeX kernel typesets BOTH \marginpar arguments, so the left and right
+% snapshots are both queued; we draw only the one matching this page's margin.
+\newcommand{\qtc@drawconn}[4]{%
+  \def\qtc@s{#2}%
+  \ifx\qtc@s\qtc@want
+    \begin{tikzpicture}[remember picture,overlay]%
+      \edef\qtc@cl{\csname qtc@col@#1\endcsname}%
+      \node[circle,draw=\qtc@cl,fill=white,minimum size=4pt,inner sep=0pt,%
+            line width=1pt,outer sep=2pt] (qtc@cc) at (qtc@t@#1) {};%
+      \draw[draw=\qtc@cl,line width=0.5pt,dashed]%
+        (qtc@cc) to[out=#3,in=#4] (qtc@#2@#1);%
+    \end{tikzpicture}%
+  \fi
+}%
+% Snapshot the current note's endpoints into uniquely-named nodes and queue the
+% draw. #1 = side (l/r), #2 = box anchor, #3 out, #4 in. Both \marginpar
+% arguments call this; only the side matching the page is replayed.
+\newcommand{\qtc@snap}[4]{%
+  \edef\qtc@id{\the\value{@todonotes@numberoftodonotes}}%
+  \begin{tikzpicture}[remember picture,overlay]%
+    \coordinate (qtc@t@\qtc@id) at ([yshift=-0.25cm,xshift=-0.1cm]inText);%
+    \coordinate (qtc@#1@\qtc@id) at ([yshift=-3mm]#2);%
+  \end{tikzpicture}%
+  \global\expandafter\edef\csname qtc@col@\qtc@id\endcsname{\@todonotes@currentlinecolor}%
+  \xdef\qtc@tmp{\noexpand\qtc@drawconn{\qtc@id}{#1}{#3}{#4}}%
+  \expandafter\g@addto@macro\expandafter\qtc@connlist\expandafter{\qtc@tmp}%
+}%
 \renewcommand{\@todonotes@drawLineToRightMargin}{%
   \if@todonotes@line%
-  \begin{tikzpicture}[remember picture,overlay]%
-    \node[circle,draw=\@todonotes@currentlinecolor,fill=white,%
-          minimum size=4pt,inner sep=0pt,line width=1pt,outer sep=2pt]%
-      (todoanch) at ([yshift=-0.25cm,xshift=-0.1cm]inText) {};%
-    \draw[draw=\@todonotes@currentlinecolor,line width=0.5pt,dashed]%
-      (todoanch) to[out=0,in=180] (inNote.west);%
-  \end{tikzpicture}%
+  \qtc@snap{r}{inNote.north west}{0}{180}%
   \fi}%
 \renewcommand{\@todonotes@drawLineToLeftMargin}{%
   \if@todonotes@line%
-  \begin{tikzpicture}[remember picture,overlay]%
-    \node[circle,draw=\@todonotes@currentlinecolor,fill=white,%
-          minimum size=4pt,inner sep=0pt,line width=1pt,outer sep=2pt]%
-      (todoanch) at ([yshift=-0.25cm,xshift=-0.1cm]inText) {};%
-    \draw[draw=\@todonotes@currentlinecolor,line width=0.5pt,dashed]%
-      (todoanch) to[out=180,in=0] (inNote.east);%
-  \end{tikzpicture}%
+  \qtc@snap{l}{inNote.north east}{180}{0}%
   \fi}%
+\fi
 \makeatother
 ]]
 
