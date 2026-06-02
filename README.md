@@ -13,6 +13,17 @@ soon as the extension is installed — there is no further enabling step. Adding
 [`extensions.quarto-comments` block](#configuration) to your front matter is
 optional but recommended, to declare authors and tune the rendering.
 
+To let a **non-inline comment placed mid-sentence** float into the margin in
+HTML (instead of appearing as an inline badge), enable the bundled filter:
+
+```yaml
+filters:
+  - comments
+```
+
+This is only needed for HTML; PDF places mid-sentence comments in the margin
+either way. Comments on their own line do not require it.
+
 ## Screenshot
 
 Here are sample renderings of the same document with comments in both HTML and PDF formats:
@@ -119,6 +130,8 @@ This works whether or not the document loads the [`geometry`](https://ctan.org/p
 
 **Two-sided documents** (`classoption: twoside`): the zone alternates sides — right on odd (recto) pages, left on even (verso) pages — so it always sits at the outer edge, away from the binding.
 
+`wide_margins` assumes a single-column layout (see the PDF limitation below).
+
 Setting `enabled: false` restores the original page layout for final output — no trace of the annotation zone remains.
 
 ## Output Behaviour
@@ -127,7 +140,8 @@ Setting `enabled: false` restores the original page layout for final output — 
 
 - Margin callouts styled as standard Quarto callouts, colourised per author.
 - Icons use [Font Awesome 6](https://fontawesome.com/), injected automatically — no manual `include-in-header` needed.
-- Inline comments render as compact badges that sit within text runs.
+- Inline comments (`inline=true`) render as compact badges that sit within text runs.
+- **Mid-sentence comments**: a non-inline comment written in the middle of a sentence is moved into the margin (as a sidenote) without breaking the paragraph, provided the bundled filter is enabled with `filters: [comments]` (see [Installation](#installation)). Without the filter it degrades gracefully to an inline badge. This is handled by `comment-hoist.lua`, which the extension registers to run after shortcode expansion; it only affects HTML (PDF places mid-sentence comments in the margin natively).
 
 ### PDF / LaTeX
 
@@ -138,6 +152,13 @@ Setting `enabled: false` restores the original page layout for final output — 
 - The connection between a comment anchor and its margin note is a smooth Bézier curve with a hollow circle at the text position.
 - **List of comments**: set `show_list: true` to prepend a styled, clickable list of all margin comments (rounded dashed frame). Inline comments are excluded.
 - **Draft layout**: set `wide_margins: true` to extend the page and give notes a dedicated, clearly delimited zone — see [Draft layout (PDF)](#draft-layout-pdf).
+
+> **Limitation — single-column only:** PDF margin comments (built on `todonotes`)
+> support **single-column** documents only. In a two-column layout
+> (`classoption: twocolumn`) notes and their connectors are misplaced — left-column
+> comments are pushed off the page and Bézier lines point nowhere — **with or
+> without** `wide_margins`. Two-column PDF output is not currently supported.
+> (HTML margin callouts are unaffected.)
 
 ### Other Formats
 

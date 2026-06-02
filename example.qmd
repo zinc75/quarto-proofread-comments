@@ -3,6 +3,8 @@ title: "Quarto Comments Demo"
 format:
   html: default
   pdf: default
+filters:
+  - comments
 extensions:
   quarto-comments:
     enabled: true
@@ -35,7 +37,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 {{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
 
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+Excepteur sint occaecat cupidatat non proident {{< comment "This non-inline comment is placed mid-sentence (inline context). It floats into the margin as a sidenote in both HTML and PDF, and the surrounding sentence stays intact." author="eb" >}}, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 {{< comment "No author specified: the comment is anonymous — no name is displayed and the note uses the default colour for the comment type." >}}
 

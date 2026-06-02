@@ -11,11 +11,15 @@ local function core()
   return dofile(directory .. "comment_core.lua")
 end
 
-local render = core()
+local render = core().render
 
+-- Quarto passes the shortcode invocation context as the 5th argument
+-- ("block" | "inline" | "text"). It is forwarded so the renderer can emit a
+-- margin callout that does not break the paragraph when a non-inline comment is
+-- placed mid-sentence (HTML).
 return {
-  ['comment']  = function(args, kwargs, meta) return render(args, kwargs, meta, nil) end,
-  ['todo']     = function(args, kwargs, meta) return render(args, kwargs, meta, "todo") end,
-  ['note']     = function(args, kwargs, meta) return render(args, kwargs, meta, "note") end,
-  ['question'] = function(args, kwargs, meta) return render(args, kwargs, meta, "question") end,
+  ['comment']  = function(args, kwargs, meta, raw_args, context) return render(args, kwargs, meta, nil,        context) end,
+  ['todo']     = function(args, kwargs, meta, raw_args, context) return render(args, kwargs, meta, "todo",     context) end,
+  ['note']     = function(args, kwargs, meta, raw_args, context) return render(args, kwargs, meta, "note",     context) end,
+  ['question'] = function(args, kwargs, meta, raw_args, context) return render(args, kwargs, meta, "question", context) end,
 }

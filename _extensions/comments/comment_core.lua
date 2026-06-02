@@ -532,7 +532,10 @@ local function build_html_inline(comment_type, comment_text, author, html_color,
   return pandoc.Span(content, pandoc.Attr("", classes, attributes))
 end
 
-local function build_html_block(comment_type, comment_text, author, html_color, config)
+-- Builds the inner callout Div (without the column-margin wrapper). Shared by
+-- the block path (wrapped in a div.column-margin) and the inline path (wrapped
+-- in a span.column-margin so it does not break the host paragraph).
+local function build_html_callout(comment_type, comment_text, author, html_color, config)
   -- Build the callout classes
   local callout_classes = {
     "quarto-comment-block",
@@ -602,13 +605,49 @@ local function build_html_block(comment_type, comment_text, author, html_color, 
     pandoc.Attr("", callout_classes, callout_attributes)
   )
 
-  -- Wrap in margin container
-  local margin_wrapper = pandoc.Div(
-    { callout },
+  return callout
+end
+
+local function build_html_block(comment_type, comment_text, author, html_color, config)
+  -- Wrap the callout in the margin container (block context).
+  return pandoc.Div(
+    { build_html_callout(comment_type, comment_text, author, html_color, config) },
     pandoc.Attr("", { "no-row-height", "column-margin", "column-container" })
   )
+end
 
-  return margin_wrapper
+-- Inline-context placeholder: a non-inline comment placed mid-sentence must
+-- render as the margin callout, but a block <div> inside a paragraph breaks the
+-- text flow (and an inline .column-margin makes Quarto grid the paragraph). The
+-- robust answer is to HOIST the callout out of the paragraph as a sibling
+-- div.column-margin (the block mechanism, which works) via the companion
+-- comment-hoist.lua filter. The shortcode therefore returns a visible inline
+-- badge (graceful fallback if the filter is not active) carrying the data the
+-- filter needs; the marker class quarto-comment-hoist tells the filter to
+-- replace it with the hoisted margin callout.
+local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
+  local span = build_html_inline(comment_type, comment_text, author, html_color, config)
+  span.classes:insert("quarto-comment-hoist")
+  span.attributes["data-comment-text"] = comment_text
+  span.attributes["data-comment-color"] = html_color or ""
+  span.attributes["data-comment-show-author"] = config.show_author and "true" or "false"
+  return span
+end
+
+-- Rebuild the margin callout Div from a hoist placeholder's data attributes.
+-- Used by comment-hoist.lua, hence exposed on the module table.
+function utils.build_hoisted_div(span)
+  local a = span.attributes
+  local comment_type = a["data-comment-type"] or "comment"
+  local comment_text = a["data-comment-text"] or ""
+  local html_color = a["data-comment-color"]
+  if html_color == "" then html_color = nil end
+  local author = nil
+  if a["data-comment-author"] and a["data-comment-author"] ~= "" then
+    author = { id = a["data-comment-author"], name = a["data-comment-author-name"] }
+  end
+  local config = { show_author = (a["data-comment-show-author"] == "true") }
+  return build_html_block(comment_type, comment_text, author, html_color, config)
 end
 
 local function build_latex(comment_type, comment_text, author, inline, config)
@@ -815,7 +854,7 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   return geom .. "\n" .. frame
 end
 
-function utils.render(args, kwargs, meta, forced_type)
+function utils.render(args, kwargs, meta, forced_type, context)
   kwargs = kwargs or {}
   local comment_text = extract_text(args, kwargs)
   comment_text = trim(comment_text or "")
@@ -871,7 +910,18 @@ function utils.render(args, kwargs, meta, forced_type)
         result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
       end
       return result
+    elseif context == "inline" then
+      -- Non-inline comment placed mid-sentence: emit an inline placeholder badge
+      -- carrying hoist data. comment-hoist.lua (when active) replaces it with a
+      -- sibling margin callout; otherwise it degrades to a visible inline badge.
+      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
+      if not _fa_css_injected then
+        _fa_css_injected = true
+        result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
+      end
+      return result
     else
+      -- Non-inline comment on its own line (block context): margin callout Div.
       local result = build_html_block(comment_type, comment_text, author, html_color, config)
       if not _fa_css_injected then
         _fa_css_injected = true
@@ -961,4 +1011,4 @@ function utils.render(args, kwargs, meta, forced_type)
   end
 end
 
-return utils.render
+return utils
