@@ -13,6 +13,17 @@ soon as the extension is installed — there is no further enabling step. Adding
 [`extensions.quarto-comments` block](#configuration) to your front matter is
 optional but recommended, to declare authors and tune the rendering.
 
+To let a **non-inline comment placed mid-sentence** float into the margin in
+HTML (instead of appearing as an inline badge), enable the bundled filter:
+
+```yaml
+filters:
+  - comments
+```
+
+This is only needed for HTML; PDF places mid-sentence comments in the margin
+either way. Comments on their own line do not require it.
+
 ## Screenshot
 
 Here are sample renderings of the same document with comments in both HTML and PDF formats:
