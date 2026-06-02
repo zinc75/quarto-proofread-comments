@@ -402,6 +402,17 @@ local function resolve_latex_color(comment_type, author)
       pcall(function()
         quarto.doc.include_text("in-header",
           "\\definecolor{" .. color_name .. "}{HTML}{" .. hex .. "}\n")
+        -- Make the list-of-todos self-contained: each \listoftodos entry written
+        -- to the .tdo references this colour by name (e.g. cmt-sm). A .tdo left
+        -- over from an earlier render (e.g. a failed compile that never reached
+        -- the cleanup, then an author/colour change) would otherwise reference an
+        -- undefined cmt-* colour and crash xcolor at \@starttoc{tdo}. Emitting a
+        -- matching \providecolor into the .tdo itself keeps every entry resolvable
+        -- regardless of the current author set (\providecolor never clobbers the
+        -- real \definecolor above).
+        quarto.doc.include_text("in-header",
+          "\\AtBeginDocument{\\addtocontents{tdo}{\\protect\\providecolor{"
+          .. color_name .. "}{HTML}{" .. hex .. "}}}\n")
       end)
     end
     return color_name
@@ -675,8 +686,23 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   --                   LuaTeX, what the kernel syncs the physical page from)
   -- Without the \paperwidth bump, the TikZ background would draw at the old
   -- width and the grey zone would land over the text.
+  -- Per-page toggling: the widening is applied through \qtcWideOn / \qtcWideOff
+  -- rather than as a one-shot, so a host can scope it (e.g. per chapter). Both
+  -- the wide and the normal register values are kept; \qtcWideOn applies the wide
+  -- set, \qtcWideOff restores the originals, and \ifqtcWide gates the grey zone.
+  -- Since \pdfpagewidth/\paperwidth are read at \shipout and \chapter issues a
+  -- \clearpage, toggles land on page boundaries. \AtBeginDocument applies the
+  -- default (\qtcWideOn) once, so the out-of-the-box behaviour is unchanged.
+  --
+  -- \newif\ifqtcWide is placed OUTSIDE the \ifx guard: \ifqtcWide begins with
+  -- \if and would be miscounted by TeX's conditional scanner in the guard's
+  -- skipped (false) branch (same reason \newif must not sit inside the guard).
+  -- The \if...\fi pairs inside the macros below are balanced, so the skipped
+  -- scan stays correct.
   local geom = table.concat({
     "\\makeatletter",                                -- outside guard, always runs
+    "\\newif\\ifqtcWide",                            -- outside guard (scanner safety)
+    "\\qtcWidetrue",
     "\\ifx\\qtc@widemargins@done\\undefined",
     "\\gdef\\qtc@widemargins@done{}%",
     "\\newlength{\\qtcExtraMargin}%",
@@ -685,25 +711,51 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "\\setlength{\\qtcInnerPad}{" .. inner_pad .. "}%",
     "\\colorlet{qtcFrameColor}{" .. frame_color .. "}%",
     "\\colorlet{qtcLineColor}{" .. frame_line .. "}%",
-    -- Defer the widening so geometry (if present) freezes the text block from
-    -- the ORIGINAL paper width. On twoside, grow the outer margin only so the
-    -- inner binding margin is kept; even pages put the annotation zone on the
-    -- left (handled by the TikZ background below).
+    -- Saved originals and precomputed wide values for the toggle (filled in
+    -- \AtBeginDocument, where \paperwidth is still the original).
+    "\\newlength{\\qtc@origPaperwidth}%",
+    "\\newlength{\\qtc@origEvensidemargin}%",
+    "\\newlength{\\qtc@origMarginparsep}%",
+    "\\newlength{\\qtc@origMarginparwidth}%",
+    "\\newlength{\\qtc@wideMarginparsep}%",
+    "\\newlength{\\qtc@wideMarginparwidth}%",
+    -- \qtcWideOn: widen the physical page (engine-specific primitive, \ifdefined
+    -- guarded) and \paperwidth (pgf `current page` ref), grow the outer margin on
+    -- twoside, and place notes inside the grey zone.
+    "\\gdef\\qtcWideOn{%",
+    "  \\qtcWidetrue",
+    "  \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}%",
+    "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\if@twoside\\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\setlength{\\marginparsep}{\\qtc@wideMarginparsep}%",
+    "  \\setlength{\\marginparwidth}{\\qtc@wideMarginparwidth}%",
+    "}%",
+    -- \qtcWideOff: restore the original A4/normal registers (no widening, and the
+    -- grey zone is suppressed because \ifqtcWide is now false).
+    "\\gdef\\qtcWideOff{%",
+    "  \\qtcWidefalse",
+    "  \\setlength{\\paperwidth}{\\qtc@origPaperwidth}%",
+    "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\qtc@origPaperwidth}\\fi%",
+    "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\qtc@origPaperwidth}\\fi%",
+    "  \\if@twoside\\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}\\fi%",
+    "  \\setlength{\\marginparsep}{\\qtc@origMarginparsep}%",
+    "  \\setlength{\\marginparwidth}{\\qtc@origMarginparwidth}%",
+    "}%",
+    -- Defer to \AtBeginDocument so geometry (if present) freezes \textwidth from
+    -- the ORIGINAL \paperwidth. Capture originals + wide marginpar values, then
+    -- apply the default (wide on) once. marginparsep collapses to
+    -- origPaperwidth - textwidth - oddsidemargin - 1in + innerPad (the extra
+    -- margin cancels); marginparwidth = extraMargin - 2*innerPad.
     "\\AtBeginDocument{%",
     "  \\makeatletter",
-    -- Widen the physical page via the engine-specific primitive (guarded so the
-    -- one absent on the current engine is silently skipped).
-    "  \\ifdefined\\pdfpagewidth\\addtolength{\\pdfpagewidth}{\\qtcExtraMargin}\\fi%",
-    "  \\ifdefined\\pagewidth\\addtolength{\\pagewidth}{\\qtcExtraMargin}\\fi%",
-    "  \\if@twoside",
-    "    \\addtolength{\\evensidemargin}{\\qtcExtraMargin}%",
-    "  \\fi",
-    "  \\addtolength{\\paperwidth}{\\qtcExtraMargin}%",
-    -- Place notes inside the grey zone with inner_pad breathing room on each side.
-    -- marginparsep = original right margin + inner_pad (left padding inside grey zone)
-    -- marginparwidth = qtcExtraMargin - 2*inner_pad (right padding included)
-    "  \\setlength{\\marginparsep}{\\dimexpr\\paperwidth-\\qtcExtraMargin-\\textwidth-\\oddsidemargin-1in+\\qtcInnerPad\\relax}%",
-    "  \\setlength{\\marginparwidth}{\\dimexpr\\qtcExtraMargin-2\\qtcInnerPad\\relax}%",
+    "  \\setlength{\\qtc@origPaperwidth}{\\paperwidth}%",
+    "  \\setlength{\\qtc@origEvensidemargin}{\\evensidemargin}%",
+    "  \\setlength{\\qtc@origMarginparsep}{\\marginparsep}%",
+    "  \\setlength{\\qtc@origMarginparwidth}{\\marginparwidth}%",
+    "  \\setlength{\\qtc@wideMarginparsep}{\\dimexpr\\qtc@origPaperwidth-\\textwidth-\\oddsidemargin-1in+\\qtcInnerPad\\relax}%",
+    "  \\setlength{\\qtc@wideMarginparwidth}{\\dimexpr\\qtcExtraMargin-2\\qtcInnerPad\\relax}%",
+    "  \\qtcWideOn",
     "  \\makeatother",
     "}%",
   }, "\n")
@@ -717,6 +769,7 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
 \usetikzlibrary{calc}%
 \AddToShipoutPictureBG{%
   \makeatletter
+  \ifqtcWide
   \begin{tikzpicture}[remember picture,overlay]
     \if@twoside
       \ifodd\value{page}
@@ -752,6 +805,7 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
         {Comments};
     \fi
   \end{tikzpicture}%
+  \fi% closes \ifqtcWide (grey zone gating)
   \makeatother
 }%
 \fi% closes \ifx\qtc@widemargins@done\undefined

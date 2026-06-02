@@ -1,19 +1,13 @@
 title: Quarto Comments
 author: "Vincent Grégoire, Eric Bavu"
-version: 0.2.0
+version: 0.3.0
 quarto-required: ">=1.5.0"
 metadata-keys:
-  - comments
+  - extensions
 contributes:
   shortcodes:
-    - comment
-    - todo
-    - note
-    - question
+    - shortcodes.lua
   formats:
     html:
       css:
         - assets/comments.css
-  project:
-    resources:
-      - assets/comments.sty
