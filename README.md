@@ -5,16 +5,13 @@ The **Quarto Comments** extension adds collaboration-friendly annotations to Qua
 ## Installation
 
 ```bash
-quarto add vgreg/quarto-comments
+quarto add zinc75/quarto-comments
 ```
 
-Then enable the extension for your project:
-
-```yaml
-project:
-  extensions:
-    - comments
-```
+The four shortcodes (`comment`, `todo`, `note`, `question`) become available as
+soon as the extension is installed — there is no further enabling step. Adding a
+[`extensions.quarto-comments` block](#configuration) to your front matter is
+optional but recommended, to declare authors and tune the rendering.
 
 ## Screenshot
 
@@ -26,7 +23,7 @@ Here are sample renderings of the same document with comments in both HTML and P
 
 ## Shortcodes
 
-Use the `comment` shortcode or one of its aliases directly inside your document:
+Four shortcodes — `comment`, `todo`, `note`, `question` — are available directly inside your document:
 
 ```markdown
 {{< comment "Need to expand this section" author="vg" type="todo" >}}
@@ -44,7 +41,7 @@ Use the `comment` shortcode or one of its aliases directly inside your document:
 | `type`      | comment \| todo \| note \| question     | Controls styling for iconography and colours        |
 | `inline`    | boolean                                 | Forces inline rendering instead of a margin callout |
 
-All aliases (`todo`, `note`, `question`) map to the same underlying logic and set the default `type`.
+`todo`, `note` and `question` are convenience shortcodes equivalent to `comment` with the matching `type` preset; all four share the same underlying logic.
 
 > **Note:** The `author` value must not start with a space — `author="vg"` and `author="v g"` both work (internal spaces are ignored), but `author=" vg"` (leading space) is silently dropped by Quarto's shortcode parser before the extension sees it.
 
