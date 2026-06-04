@@ -72,6 +72,7 @@ extensions:
     show_author: true     # show author labels (default: true)
     show_list: true       # prepend a styled list of all comments in PDF (default: false)
     connector: numbered   # in-text marker style: numbered (default) | bezier
+    inline_style: flow    # PDF inline comments: flow (default, flowing badge) | box (legacy \todo[inline])
     wide_margins: true    # extend page width for a dedicated annotation zone (default: false)
     # extra_margin: "6.5cm" # width added to the page (default: 6.5cm)
     # twocolumn_marginparwidth: "auto" # margin-note width in twocolumn, non-wide (default: "auto")
@@ -142,13 +143,14 @@ Setting `enabled: false` restores the original page layout for final output — 
 
 - Margin callouts styled as standard Quarto callouts, colourised per author.
 - Icons use [Font Awesome 6](https://fontawesome.com/), injected automatically — no manual `include-in-header` needed.
-- Inline comments (`inline=true`) render as compact badges that sit within text runs.
+- Inline comments (`inline=true`) render as compact badges that **flow with the text and break across lines** (coloured icon + author, black body) — like any run of text, not a rigid block.
 - **Mid-sentence comments**: a non-inline comment written in the middle of a sentence is moved into the margin (as a sidenote) without breaking the paragraph, provided the bundled filter is enabled with `filters: [comments]` (see [Installation](#installation)). Without the filter it degrades gracefully to an inline badge. This is handled by `comment-hoist.lua`, which the extension registers to run after shortcode expansion; it only affects HTML (PDF places mid-sentence comments in the margin natively).
 - **In-text anchors**: every margin comment leaves a small clickable icon (in the author colour) at its position in the text, linked to its margin callout. Hovering either the icon or the callout highlights the other.
 
 ### PDF / LaTeX
 
-- Comments render via the [`todonotes`](https://ctan.org/pkg/todonotes) package; inline comments use `\todo[inline]{...}`.
+- Margin comments render via the [`todonotes`](https://ctan.org/pkg/todonotes) package.
+- **Inline comments** (`inline=true`, `inline_style`, default `flow`): render as a coloured, rounded badge that **flows and breaks across lines and columns** like the HTML one (built on `soul` + `soulpos` + `tcolorbox`), instead of the rigid `\todo[inline]` box. Set `inline_style: box` for the legacy `todonotes` inline box.
 - Required LaTeX packages (`xcolor`, `todonotes`, `fontawesome5`) are injected automatically — no manual `include-in-header` needed.
 - Icons use [Font Awesome 5](https://ctan.org/pkg/fontawesome5) in outline (regular) style, compatible with pdflatex, xelatex, and lualatex.
 - Author colours are applied to the note background, border, and the in-text marker.
