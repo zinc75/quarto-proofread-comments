@@ -2,15 +2,17 @@
 title: "Quarto Comments Demo"
 format:
   html: default
-  pdf: default
+  pdf:
+    documentclass: article
+    classoption: [twocolumn]
 filters:
   - comments
 extensions:
   quarto-comments:
     enabled: true
     show_author: true
-    show_list: true
-    wide_margins: true
+    show_list: false
+    wide_margins: false
     # extra_margin: "6.5cm"   # width added to the page for the annotation zone (default: 6.5cm)
     # inner_pad: "0.3cm"      # padding inside the annotation zone on each side (default: 0.3cm)
     # frame_color: "gray!10"  # background of the annotation zone (default: gray!10)

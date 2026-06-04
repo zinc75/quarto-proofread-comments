@@ -13,6 +13,7 @@ local _listoftodos_injected = false
 local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
+local _latex_twocol_mpwidth_injected = false
 
 -- Replaces todonotes' default right-angle connector with a smooth dashed curve
 -- and thinner stroke. Two refinements over a naive inline redefinition:
@@ -272,6 +273,7 @@ local function get_config(meta)
     show_author = true,
     show_list = false,
     wide_margins = false,
+    twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
     inner_pad = "0.3cm",
     frame_color = "gray!10",
@@ -309,6 +311,9 @@ local function get_config(meta)
   if config_meta.wide_margins ~= nil then
     local wm = meta_to_bool(config_meta.wide_margins)
     if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.twocolumn_marginparwidth then
+    config.twocolumn_marginparwidth = meta_to_string(config_meta.twocolumn_marginparwidth)
   end
   if config_meta.extra_margin then
     config.extra_margin = meta_to_string(config_meta.extra_margin)
@@ -698,6 +703,44 @@ local function build_latex(comment_type, comment_text, author, inline, config)
   end
 end
 
+-- Build the LaTeX preamble snippet that gives todonotes a usable marginpar
+-- width in TWO-COLUMN layouts (non-wide path). In single column the class
+-- default is fine and we emit nothing — the whole body is gated on
+-- \if@twocolumn, so single-column output is byte-for-byte unchanged.
+--
+-- In twocolumn the kernel places a note in the LEFT page margin for the first
+-- column and the RIGHT page margin for the second, both using the single
+-- \marginparwidth register. The class default is far too narrow there, so the
+-- note text gets crushed. We set it AtBeginDocument (after geometry, if loaded,
+-- has frozen \textwidth and the margins) to a value that fits.
+--
+-- width = "auto": take the TIGHTER of the two physical side margins, minus
+-- \marginparsep and a 2mm safety pad, so the box fits whichever margin it lands
+-- in. Otherwise use the literal value the user supplied.
+local function build_twocolumn_marginparwidth_header(width_spec)
+  local set_width
+  if not width_spec or width_spec == "" or width_spec:lower() == "auto" then
+    set_width = table.concat({
+      "    \\newlength{\\qtc@mpL}\\newlength{\\qtc@mpR}%",
+      "    \\setlength{\\qtc@mpL}{\\dimexpr 1in+\\oddsidemargin-\\marginparsep-2mm\\relax}%",
+      "    \\setlength{\\qtc@mpR}{\\dimexpr \\paperwidth-1in-\\oddsidemargin-\\textwidth-\\marginparsep-2mm\\relax}%",
+      "    \\ifdim\\qtc@mpL<\\qtc@mpR \\setlength{\\marginparwidth}{\\qtc@mpL}%",
+      "    \\else \\setlength{\\marginparwidth}{\\qtc@mpR}\\fi",
+    }, "\n")
+  else
+    set_width = "    \\setlength{\\marginparwidth}{" .. width_spec .. "}%"
+  end
+
+  return table.concat({
+    "\\makeatletter",
+    "\\AtBeginDocument{%",
+    "  \\if@twocolumn",
+    set_width,
+    "  \\fi}%",
+    "\\makeatother",
+  }, "\n")
+end
+
 -- Build the LaTeX preamble snippet that widens the page for draft margin notes.
 -- Guards against multiple injections with a LaTeX-level flag so it is safe to
 -- call once per shortcode type (up to 4 times per document).
@@ -988,6 +1031,13 @@ function utils.render(args, kwargs, meta, forced_type, context)
             config.inner_pad,
             config.frame_color,
             config.frame_line))
+      end
+      -- Non-wide path: give todonotes a usable marginpar width in twocolumn.
+      -- The wide path sets \marginparwidth itself, so this is mutually exclusive.
+      if not config.wide_margins and not _latex_twocol_mpwidth_injected then
+        _latex_twocol_mpwidth_injected = true
+        quarto.doc.include_text("in-header",
+          build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
       end
     end)
     return build_latex(comment_type, comment_text, author, inline, config)
