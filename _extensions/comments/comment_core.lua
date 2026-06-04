@@ -9,6 +9,75 @@ end
 
 local FA_CSS_LINK = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />'
 local _fa_css_injected = false
+local _html_hover_injected = false
+
+-- Styling for the numbered-mode HTML feature only (the in-text anchor and the
+-- hover/:target highlight). Injected as a <style> because an extension's
+-- formats.html.css is not applied when used as a filter, and because the rest of
+-- the comment styling is emitted inline per element — so we deliberately do NOT
+-- inject the whole comments.css (its base/dark-mode rules would double up with,
+-- and override, those inline styles). The hover effect is deliberately light: a
+-- small grow plus a thin outer ring in the author colour.
+local ANCHOR_CSS = [[
+<style>
+.quarto-comment-anchor {
+  text-decoration: none;
+  font-size: 0.8em;
+  vertical-align: super;
+  padding: 0 0.1em;
+  cursor: pointer;
+  display: inline-block;
+  transition: transform 0.12s ease-in-out, filter 0.12s ease-in-out;
+}
+/* The icon-only line for a block-context comment: take as little vertical room
+   as possible so it does not space out the surrounding paragraphs. */
+.quarto-comment-anchor-line {
+  margin: 0 !important;
+  line-height: 1;
+}
+.quarto-comment-anchor:hover,
+.quarto-comment-anchor.quarto-comment-hl {
+  transform: scale(1.4);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.quarto-comment-block.callout {
+  transition: transform 0.12s ease-in-out, box-shadow 0.12s ease-in-out;
+}
+.quarto-comment-block.callout:target,
+.quarto-comment-block.callout.quarto-comment-hl {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px var(--comment-color, #6c757d),
+              0 4px 12px rgba(0, 0, 0, 0.18);
+}
+</style>
+]]
+
+-- Hovering an in-text anchor highlights its margin callout (and vice versa). A
+-- CSS sibling selector cannot reach across the DOM (anchor inside the paragraph,
+-- callout hoisted elsewhere), so a tiny vanilla script wires the two by id.
+local HTML_HOVER_SCRIPT = [[
+<script>
+(function () {
+  function wire() {
+    document.querySelectorAll('a.quarto-comment-anchor').forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (href.charAt(0) !== '#') return;
+      var target = document.getElementById(href.slice(1));
+      if (!target) return;
+      var on = function () { target.classList.add('quarto-comment-hl'); a.classList.add('quarto-comment-hl'); };
+      var off = function () { target.classList.remove('quarto-comment-hl'); a.classList.remove('quarto-comment-hl'); };
+      a.addEventListener('mouseenter', on);
+      a.addEventListener('mouseleave', off);
+      target.addEventListener('mouseenter', on);
+      target.addEventListener('mouseleave', off);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else { wire(); }
+})();
+</script>
+]]
 local _listoftodos_injected = false
 local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
@@ -729,20 +798,57 @@ local function build_html_callout(comment_type, comment_text, author, html_color
     pandoc.Attr("", { "callout-body-container", "callout-body" })
   )
 
+  -- An id (qtc-<n>) lets an in-text anchor link to this callout (HTML).
+  local callout_id = number and ("qtc-" .. number) or ""
   local callout = pandoc.Div(
     { header, body },
-    pandoc.Attr("", callout_classes, callout_attributes)
+    pandoc.Attr(callout_id, callout_classes, callout_attributes)
   )
 
   return callout
 end
 
-local function build_html_block(comment_type, comment_text, author, html_color, config, number)
+-- Small in-text anchor (HTML): the comment's icon in the author colour, linked
+-- to its margin callout (#qtc-<n>). Returns nil when there is no number to link.
+local function build_anchor(comment_type, html_color, number)
+  if not number then return nil end
+  local icon_html = COMMENT_ICONS[comment_type] or COMMENT_ICONS.comment
+  local attrs = {}
+  if html_color and html_color ~= "" then attrs.style = "color: " .. html_color end
+  return pandoc.Link(
+    { pandoc.RawInline("html", icon_html) },
+    "#qtc-" .. number, "",
+    pandoc.Attr("", { "quarto-comment-anchor", "comment-" .. comment_type }, attrs)
+  )
+end
+
+local function build_html_block(comment_type, comment_text, author, html_color, config, number, with_anchor)
   -- Wrap the callout in the margin container (block context).
-  return pandoc.Div(
+  local margin = pandoc.Div(
     { build_html_callout(comment_type, comment_text, author, html_color, config, number) },
     pandoc.Attr("", { "no-row-height", "column-margin", "column-container" })
   )
+  -- For a stand-alone (block-context) comment, also drop a clickable in-text
+  -- icon in the main column so every margin comment is reachable from the text,
+  -- like the mid-sentence ones. (The hoist path passes with_anchor=false because
+  -- it inserts the anchor itself, in the middle of the host sentence.)
+  if with_anchor then
+    local anchor = build_anchor(comment_type, html_color, number)
+    if anchor then
+      -- Wrap the callout in a Div so Quarto lays it out as a page-columns grid
+      -- (body + margin). The in-text icon goes in a small classed Div (the grid
+      -- body item) rather than a bare <a> (which, as a direct grid child, would
+      -- stretch to the whole column width) or a <p> (whose paragraph margins
+      -- would punch a vertical hole between the surrounding paragraphs). The CSS
+      -- zeroes that line's margins so it barely takes any room.
+      local anchor_line = pandoc.Div(
+        { pandoc.Plain({ anchor }) },
+        pandoc.Attr("", { "quarto-comment-anchor-line" })
+      )
+      return pandoc.Div({ anchor_line, margin })
+    end
+  end
+  return margin
 end
 
 -- Inline-context placeholder: a non-inline comment placed mid-sentence must
@@ -760,7 +866,19 @@ local function build_html_inline_placeholder(comment_type, comment_text, author,
   span.attributes["data-comment-text"] = comment_text
   span.attributes["data-comment-color"] = html_color or ""
   span.attributes["data-comment-show-author"] = config.show_author and "true" or "false"
+  span.attributes["data-comment-number"] = number and tostring(number) or ""
   return span
+end
+
+-- Build the small in-text anchor (HTML): the comment's icon in the author colour,
+-- linked to its hoisted callout (#qtc-<n>). Used by comment-hoist.lua to replace
+-- a mid-sentence placeholder, so the reader gets a clickable mark in the text and
+-- the full comment floats to the margin.
+function utils.build_anchor_from_span(span)
+  local a = span.attributes
+  local number = a["data-comment-number"]
+  if not number or number == "" then return nil end
+  return build_anchor(a["data-comment-type"] or "comment", a["data-comment-color"], number)
 end
 
 -- Rebuild the margin callout Div from a hoist placeholder's data attributes.
@@ -776,7 +894,9 @@ function utils.build_hoisted_div(span)
     author = { id = a["data-comment-author"], name = a["data-comment-author-name"] }
   end
   local config = { show_author = (a["data-comment-show-author"] == "true") }
-  return build_html_block(comment_type, comment_text, author, html_color, config)
+  local number = a["data-comment-number"]
+  if number == "" then number = nil end
+  return build_html_block(comment_type, comment_text, author, html_color, config, number)
 end
 
 local function build_latex(comment_type, comment_text, author, inline, config, number)
@@ -1156,6 +1276,13 @@ function utils.render(args, kwargs, meta, forced_type, context)
 
   -- Render based on format
   if is_html_format() then
+    if not _html_hover_injected then
+      _html_hover_injected = true
+      pcall(function()
+        quarto.doc.include_text("in-header", ANCHOR_CSS)
+        quarto.doc.include_text("after-body", HTML_HOVER_SCRIPT)
+      end)
+    end
     local html_color = resolve_html_color(comment_type, author)
     if inline then
       local result = build_html_inline(comment_type, comment_text, author, html_color, config, number)
@@ -1175,8 +1302,9 @@ function utils.render(args, kwargs, meta, forced_type, context)
       end
       return result
     else
-      -- Non-inline comment on its own line (block context): margin callout Div.
-      local result = build_html_block(comment_type, comment_text, author, html_color, config, number)
+      -- Non-inline comment on its own line (block context): margin callout Div
+      -- plus an in-text icon anchor in the main column.
+      local result = build_html_block(comment_type, comment_text, author, html_color, config, number, true)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawBlock("html", FA_CSS_LINK))
