@@ -77,6 +77,9 @@ local BEZIER_CONNECTION_LATEX = [[
 % snapshots are both queued; we draw only the one matching this page's margin.
 \newcommand{\qtc@drawconn}[4]{%
   \def\qtc@s{#2}%
+  % In twocolumn the wanted side is per-note (column-based, recorded at snap);
+  % override the page-global \qtc@want with it. Single column keeps \qtc@want.
+  \if@twocolumn\edef\qtc@want{\csname qtc@want@#1\endcsname}\fi
   \ifx\qtc@s\qtc@want
     \begin{tikzpicture}[remember picture,overlay]%
       \edef\qtc@cl{\csname qtc@col@#1\endcsname}%
@@ -97,6 +100,18 @@ local BEZIER_CONNECTION_LATEX = [[
     \coordinate (qtc@#1@\qtc@id) at ([yshift=-3mm]#2);%
   \end{tikzpicture}%
   \global\expandafter\edef\csname qtc@col@\qtc@id\endcsname{\@todonotes@currentlinecolor}%
+  % Two-column: the kernel chooses the margin by COLUMN, not by page parity, so
+  % record this note's side now (first column -> left, second -> right). Both
+  % \marginpar arguments call \qtc@snap for the same note id with the same column
+  % state, so this is set consistently. Single column leaves the side to the
+  % page-parity rule in the shipout hook.
+  \if@twocolumn
+    \if@firstcolumn
+      \global\expandafter\edef\csname qtc@want@\qtc@id\endcsname{l}%
+    \else
+      \global\expandafter\edef\csname qtc@want@\qtc@id\endcsname{r}%
+    \fi
+  \fi
   \xdef\qtc@tmp{\noexpand\qtc@drawconn{\qtc@id}{#1}{#3}{#4}}%
   \expandafter\g@addto@macro\expandafter\qtc@connlist\expandafter{\qtc@tmp}%
 }%
