@@ -83,6 +83,7 @@ local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
 local _latex_numbered_injected = false
+local _latex_inline_flow_injected = false
 local _latex_twocol_mpwidth_injected = false
 
 -- Global, document-order counter shared by all comments (inline and margin, both
@@ -298,6 +299,46 @@ local NUMBERED_MARKER_LATEX = [[
 \makeatother
 ]]
 
+-- True-inline comments (inline_style: flow, default). \todo[inline] is a near-
+-- block box that breaks the text flow; this renders an inline comment as a
+-- coloured, rounded badge that flows and breaks across lines AND columns, like
+-- the HTML inline badge. Built on soul + soulpos + tcolorbox: \ulposdef runs an
+-- action per line-fragment of the marked text (giving \ulwidth and start/end
+-- flags), drawing an on-line tcolorbox of that width per fragment, with rounded
+-- corners only at the true ends (sharp where the text wraps) — so the fragments
+-- read as one continuous frame. Technique: https://tex.stackexchange.com/a/697157
+--
+-- soul handles plain text, math and \textbf inside the marked text; its one
+-- soul-hostile command is \textcolor, which the caller isolates in an \mbox for
+-- the coloured icon+number prefix (see build_latex). soul must load before
+-- soulpos. Guarded so it is injected once.
+local INLINE_FLOW_LATEX = [[
+\makeatletter
+\ifx\qtc@inline@done\undefined
+\gdef\qtc@inline@done{}%
+\usepackage{soul}
+\usepackage{soulpos}
+\usepackage{tcolorbox}
+\colorlet{qtcul}{gray}
+\newtcbox{\qtc@inlinebox}[1][]{%
+  on line, arc=1pt, outer arc=2pt,
+  colback=qtcul!12!white, colframe=qtcul!75!black,
+  boxsep=0pt, left=1pt, right=-0.5pt, top=0.5pt, bottom=0.5pt,
+  boxrule=0pt, toprule=0.6pt, bottomrule=0.6pt, #1}%
+\newcommand\qtcinline[1][gray]{\colorlet{qtcul}{#1}\qtc@inline@}%
+\ulposdef\qtc@inline@[xoffset-start=2pt]{%
+  \ifulstarttype{0}%
+    {\tcbset{qtcULside/.append style={leftrule=0.6pt}}}%
+    {\tcbset{qtcULside/.append style={leftrule=0pt,sharp corners=west}}}%
+  \ifulendtype{0}%
+    {\tcbset{qtcULside/.append style={rightrule=0.6pt,right=-0.5pt}}}%
+    {\tcbset{qtcULside/.append style={rightrule=0pt,sharp corners=east,right=-2pt}}}%
+  \qtc@inlinebox[qtcULside]{\vphantom{Ap}\rule{\ulwidth}{0pt}}%
+}%
+\fi
+\makeatother
+]]
+
 local VALID_TYPES = {
   comment = true,
   todo = true,
@@ -459,6 +500,7 @@ local function get_config(meta)
     show_author = true,
     show_list = false,
     connector = "numbered",
+    inline_style = "flow",
     wide_margins = false,
     twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
@@ -503,6 +545,12 @@ local function get_config(meta)
     local c = meta_to_string(config_meta.connector):lower()
     if c == "bezier" or c == "numbered" then
       config.connector = c
+    end
+  end
+  if config_meta.inline_style then
+    local s = meta_to_string(config_meta.inline_style):lower()
+    if s == "flow" or s == "box" then
+      config.inline_style = s
     end
   end
   if config_meta.twocolumn_marginparwidth then
@@ -694,14 +742,20 @@ local function build_html_inline(comment_type, comment_text, author, html_color,
   if html_color then
     local style_parts = {
       "--comment-color: " .. html_color,
-      "color: " .. html_color,
+      -- Body text stays the default colour (black) for readability and to match
+      -- the margin callouts; only the icon and the author label are coloured.
       "border: 1px solid " .. html_color,
       "background: color-mix(in srgb, " .. html_color .. " 15%, #ffffff 85%)",
       "padding: 0.1rem 0.45rem",
       "border-radius: 0.4rem",
       "font-size: 0.9em",
-      "display: inline-block",
-      "vertical-align: baseline",
+      -- display:inline (not inline-block) so a long inline comment FLOWS and
+      -- breaks across lines; box-decoration-break:clone repeats the border,
+      -- background and padding on each line fragment (rounded ends per fragment),
+      -- the CSS equivalent of the LaTeX soulpos badge.
+      "display: inline",
+      "-webkit-box-decoration-break: clone",
+      "box-decoration-break: clone",
       "margin: 0 0.25em",
     }
     attributes.style = table.concat(style_parts, "; ") .. ";"
@@ -718,12 +772,21 @@ local function build_html_inline(comment_type, comment_text, author, html_color,
 
   local content = pandoc.List()
 
+  -- Icon in the author colour (body text stays black).
   local icon_html = COMMENT_ICONS[comment_type] or COMMENT_ICONS.comment
-  content:insert(pandoc.RawInline("html", icon_html .. " "))
+  local colour_style = html_color and (' style="color:' .. html_color .. '"') or ""
+  content:insert(pandoc.RawInline("html",
+    "<span" .. colour_style .. ">" .. icon_html .. "</span> "))
 
+  -- Author label: bold, in the author colour.
   local show_author = config.show_author and author and author.name and author.name ~= ""
   if show_author then
-    content:insert(pandoc.Strong { pandoc.Str(author.name .. ": ") })
+    local strong = pandoc.Strong { pandoc.Str(author.name .. ": ") }
+    if html_color then
+      content:insert(pandoc.Span({ strong }, pandoc.Attr("", {}, { style = "color: " .. html_color })))
+    else
+      content:insert(strong)
+    end
   end
   content:extend(parse_inlines(comment_text))
 
@@ -902,84 +965,98 @@ end
 local function build_latex(comment_type, comment_text, author, inline, config, number)
   local latex_color = resolve_latex_color(comment_type, author)
   local base_color = latex_color:match("^([^!]+)") or latex_color
-  -- "numbered" is the default; "bezier" reproduces the legacy connecting line.
+  -- "numbered" is the default; "bezier" reproduces the legacy connecting line and
+  -- shows NO numbers at all (margin or inline).
   local numbered = (config.connector ~= "bezier")
-
-  local options = {}
-  if inline then
-    table.insert(options, "inline")
-  end
-  -- Numbered margin notes draw no todonotes line (the link is the connector).
-  if numbered and not inline then
-    table.insert(options, "noline")
-  end
-  if latex_color and latex_color ~= "" then
-    -- For plain color names (auto-assigned via \definecolor), dilute the
-    -- background so the note stays light; user-defined tints (e.g. "blue!20")
-    -- are used as-is since they already carry the desired opacity.
-    local bg_color = latex_color:find("!", 1, true)
-      and latex_color
-      or  (latex_color .. "!20!white")
-    table.insert(options, "color=" .. bg_color)
-    table.insert(options, "bordercolor=" .. base_color)
-    table.insert(options, "linecolor=" .. base_color)
-  end
-  table.insert(options, "size=\\footnotesize")
 
   -- Icon: dilute the base color to 70% inside the box so the outline glyph looks
   -- lighter than a fully saturated one in print.
   local fa_cmd = LATEX_FA_ICONS[comment_type] or LATEX_FA_ICONS.comment
   local icon_box = "\\textcolor{" .. base_color .. "!70}{" .. fa_cmd .. "}"
-
   local show_author = config.show_author and author and author.name and author.name ~= ""
-  local author_prefix = show_author
-    and ("\\textbf{" .. escape_latex(author.name) .. ":} ") or ""
+  -- Author label: bold, in the author colour (convention shared by every type).
+  -- `author_colored` is for non-soul contexts (margin, inline box, .tdo caption);
+  -- `author_flow` wraps it in \mbox so the soul-hostile \textcolor survives the
+  -- soulpos flow badge (the short name stays unbroken — fine).
+  local name_bold = show_author and ("\\textbf{" .. escape_latex(author.name) .. ":}") or nil
+  local author_colored = name_bold
+    and ("\\textcolor{" .. base_color .. "}{" .. name_bold .. "} ") or ""
+  local author_flow = name_bold
+    and ("\\mbox{\\textcolor{" .. base_color .. "}{" .. name_bold .. "}} ") or ""
   local body = escape_latex_with_math(comment_text)
-
-  -- The displayed number is a LaTeX counter (qtccomment), NOT the Lua number:
-  -- LaTeX steps it in DOCUMENT order at typeset time, whereas the Lua counter
-  -- follows shortcode-expansion order (Quarto expands mid-sentence/inline
-  -- shortcodes last, which would misnumber them).
+  -- The displayed number is a LaTeX counter (qtccomment), stepped in DOCUMENT
+  -- order at typeset time (the Lua counter follows shortcode-expansion order,
+  -- which misnumbers mid-sentence/inline comments). Numbered mode only.
   local num = "\\textcolor{" .. base_color .. "}{\\textbf{\\arabic{qtccomment}}}"
 
-  local content
-  if numbered then
-    -- Caption for the .tdo / list-of-todos: icon, number, author, text. No
-    -- hyperref here (todonotes writes the caption unprotected and would choke on
-    -- \hypertarget), but \arabic is robust and \addcontentsline's \protected@write
-    -- expands it at call time (counter = this note's value), so the list shows the
-    -- correct document-order number.
-    table.insert(options, "caption={" .. icon_box .. "\\," .. num
-      .. " " .. author_prefix .. body .. "}")
-    -- Displayed box: a raised jump target (so the anchor lands on the first line),
-    -- icon + number on the first line, then a forced break so the author (if any)
-    -- and the text always start on the second line — never crowding/overflowing
-    -- the header in a narrow margin.
-    content = "\\qtcraise{\\hypertarget{qtc-\\arabic{qtccomment}}{}}"
-      .. icon_box .. "\\," .. num .. "\\\\" .. author_prefix .. body
-  else
-    content = icon_box .. " " .. author_prefix .. body
+  local function colour_opts(t)
+    if latex_color and latex_color ~= "" then
+      -- For plain color names (auto-assigned via \definecolor), dilute the
+      -- background so the note stays light; user-defined tints (e.g. "blue!20")
+      -- are used as-is since they already carry the desired opacity.
+      local bg = latex_color:find("!", 1, true) and latex_color or (latex_color .. "!20!white")
+      table.insert(t, "color=" .. bg)
+      table.insert(t, "bordercolor=" .. base_color)
+      table.insert(t, "linecolor=" .. base_color)
+    end
   end
 
-  local option_string = "[" .. table.concat(options, ",") .. "]"
-  local todo = string.format("\\todo%s{%s}", option_string, content)
+  -- ---- INLINE COMMENTS ----
+  if inline then
+    local step = numbered and "\\stepcounter{qtccomment}" or ""
+    -- Coloured prefix: icon (+ number when numbered), isolated from soul by \mbox
+    -- (\textcolor is soul's one hostile command; the icon/bold are fine).
+    local prefix_inner = numbered and (fa_cmd .. "\\,\\textbf{\\arabic{qtccomment}}") or fa_cmd
+    if config.inline_style == "box" then
+      -- Legacy todonotes inline box.
+      local opts = { "inline", "size=\\footnotesize" }
+      colour_opts(opts)
+      local content = icon_box .. (numbered and ("\\," .. num) or "") .. " " .. author_colored .. body
+      return pandoc.RawInline("tex",
+        step .. "\\todo[" .. table.concat(opts, ",") .. "]{" .. content .. "}")
+    end
+    -- flow (default): a soulpos badge that flows and breaks like the HTML inline
+    -- badge. The author \textbf and the text + math flow through soul; only the
+    -- coloured prefix is \mbox-isolated. The frame colour is the author colour.
+    -- \footnotesize matches the margin notes. No forced space around the badge:
+    -- it behaves like a word, so spacing comes from the source (soulpos'
+    -- xoffset-start keeps the frame off the preceding glyph even with no space).
+    local content = "\\mbox{\\textcolor{" .. base_color .. "}{" .. prefix_inner .. "}}"
+      .. " " .. author_flow .. body
+    -- \qtcinline does not go through \todo, so register the comment in the
+    -- list-of-todos ourselves (same caption format as a margin note), so inline
+    -- comments appear in the list like the box mode does.
+    local list_cap = icon_box .. (numbered and ("\\," .. num) or "") .. " " .. author_colored .. body
+    local tdo = "\\addcontentsline{tdo}{todo}{" .. list_cap .. "}"
+    return pandoc.RawInline("tex",
+      step .. tdo .. "{\\footnotesize\\qtcinline[" .. base_color .. "]{" .. content .. "}}")
+  end
+
+  -- ---- MARGIN COMMENTS ----
+  local options = {}
+  if numbered then table.insert(options, "noline") end
+  colour_opts(options)
+  table.insert(options, "size=\\footnotesize")
 
   if not numbered then
-    if inline then return pandoc.RawInline("tex", todo) end
-    return pandoc.RawBlock("tex", todo)
+    -- Bezier mode: plain todonotes note, no number; the line/circle is drawn by
+    -- BEZIER_CONNECTION_LATEX.
+    local content = icon_box .. " " .. author_colored .. body
+    return pandoc.RawBlock("tex", "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
   end
 
-  -- Numbered mode. Step the document-order counter, and (for margin notes) hand
-  -- the colour and icon to the foreground-marker machinery via @-free macros
-  -- (\qtccol / \qtcico, read by \qtc@snapmk). \def/\stepcounter do not typeset,
-  -- so \todo still backs up its vertical space and the note takes no extra line.
-  if inline then
-    -- Inline note: numbered label only, no margin marker.
-    return pandoc.RawInline("tex", "\\stepcounter{qtccomment}" .. todo)
-  end
+  -- Numbered mode. Caption (plain, robust) feeds the .tdo / list-of-todos with
+  -- the correct document-order number; the displayed box raises the jump target
+  -- onto the first line, then forces a break so a long author never overflows a
+  -- narrow margin. \qtccol/\qtcico feed the foreground-marker machinery
+  -- (\qtc@snapmk); \def/\stepcounter do not typeset, so \todo still backs up its
+  -- vertical space and the note takes no extra line.
+  table.insert(options, "caption={" .. icon_box .. "\\," .. num .. " " .. author_colored .. body .. "}")
+  local content = "\\qtcraise{\\hypertarget{qtc-\\arabic{qtccomment}}{}}"
+    .. icon_box .. "\\," .. num .. "\\\\" .. author_colored .. body
   local setup = "\\def\\qtccol{" .. base_color .. "}\\def\\qtcico{" .. fa_cmd
     .. "}\\stepcounter{qtccomment}%\n"
-  return pandoc.RawBlock("tex", setup .. todo)
+  return pandoc.RawBlock("tex", setup .. "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
 end
 
 -- Build the LaTeX preamble snippet that gives todonotes a usable marginpar
@@ -1373,6 +1450,13 @@ function utils.render(args, kwargs, meta, forced_type, context)
           quarto.doc.use_latex_package("hyperref")
           quarto.doc.include_text("in-header", NUMBERED_MARKER_LATEX)
         end
+      end
+      -- Inline flow mode needs soul/soulpos/tcolorbox + the \qtcinline badge.
+      -- Inject only when an inline comment actually uses it (independent of the
+      -- connector mode, which is about margin comments).
+      if inline and config.inline_style ~= "box" and not _latex_inline_flow_injected then
+        _latex_inline_flow_injected = true
+        quarto.doc.include_text("in-header", INLINE_FLOW_LATEX)
       end
       if config.wide_margins and not _latex_wide_margins_injected then
         _latex_wide_margins_injected = true
