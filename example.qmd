@@ -11,6 +11,7 @@ extensions:
     show_author: true
     show_list: true
     # connector: numbered     # in-text marker: numbered (default, clickable) | bezier (legacy line)
+    # inline_style: flow      # inline comments (PDF): flow (default, soulpos badge) | box (legacy \todo[inline])
     wide_margins: true
     # extra_margin: "6.5cm"   # width added to the page for the annotation zone (default: 6.5cm)
     # inner_pad: "0.3cm"      # padding inside the annotation zone on each side (default: 0.3cm)
@@ -55,7 +56,7 @@ Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
 sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
 Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
 
-Discussion continues inline{{< question "Do we need to cite Smith (2024) here?" author="vg" inline=true >}} while keeping the flow of the paragraph.
+Discussion continues inline {{< question "Do we need to cite Smith (2024) here? This is a deliberately long inline comment to test wrapping across several lines, with maths inside: the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ and Maxwell-Ampere $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, to confirm the flowing badge breaks cleanly." author="vg" inline=true >}} while keeping the flow of the paragraph.
 Ut labore et dolore magnam aliquam quaerat voluptatem.
 
 {{< comment "I don't agree with this interpretation. Let's discuss." author="cg" >}}
