@@ -12,7 +12,3 @@ contributes:
     # produced during shortcode expansion, which runs after pre-quarto filters).
     - at: post-quarto
       path: comment-hoist.lua
-  formats:
-    html:
-      css:
-        - assets/comments.css
