@@ -15,6 +15,10 @@ local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
 local _latex_twocol_mpwidth_injected = false
 
+-- Global, document-order counter shared by all comments (inline and margin, both
+-- formats), so numbering never skips. Assigned once per comment in utils.render.
+local _qtc_number = 0
+
 -- Replaces todonotes' default right-angle connector with a smooth dashed curve
 -- and thinner stroke. Two refinements over a naive inline redefinition:
 --
@@ -305,6 +309,7 @@ local function get_config(meta)
     enabled = true,
     show_author = true,
     show_list = false,
+    connector = "numbered",
     wide_margins = false,
     twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
@@ -344,6 +349,12 @@ local function get_config(meta)
   if config_meta.wide_margins ~= nil then
     local wm = meta_to_bool(config_meta.wide_margins)
     if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.connector then
+    local c = meta_to_string(config_meta.connector):lower()
+    if c == "bezier" or c == "numbered" then
+      config.connector = c
+    end
   end
   if config_meta.twocolumn_marginparwidth then
     config.twocolumn_marginparwidth = meta_to_string(config_meta.twocolumn_marginparwidth)
@@ -523,7 +534,7 @@ local function parse_inlines(text)
   return pandoc.List({ pandoc.Str(text) })
 end
 
-local function build_html_inline(comment_type, comment_text, author, html_color, config)
+local function build_html_inline(comment_type, comment_text, author, html_color, config, number)
   local classes = { "quarto-comment", "quarto-comment-inline", "comment-" .. comment_type }
   local attributes = {
     ["data-comment-type"] = comment_type,
@@ -573,7 +584,7 @@ end
 -- Builds the inner callout Div (without the column-margin wrapper). Shared by
 -- the block path (wrapped in a div.column-margin) and the inline path (wrapped
 -- in a span.column-margin so it does not break the host paragraph).
-local function build_html_callout(comment_type, comment_text, author, html_color, config)
+local function build_html_callout(comment_type, comment_text, author, html_color, config, number)
   -- Build the callout classes
   local callout_classes = {
     "quarto-comment-block",
@@ -646,10 +657,10 @@ local function build_html_callout(comment_type, comment_text, author, html_color
   return callout
 end
 
-local function build_html_block(comment_type, comment_text, author, html_color, config)
+local function build_html_block(comment_type, comment_text, author, html_color, config, number)
   -- Wrap the callout in the margin container (block context).
   return pandoc.Div(
-    { build_html_callout(comment_type, comment_text, author, html_color, config) },
+    { build_html_callout(comment_type, comment_text, author, html_color, config, number) },
     pandoc.Attr("", { "no-row-height", "column-margin", "column-container" })
   )
 end
@@ -663,8 +674,8 @@ end
 -- badge (graceful fallback if the filter is not active) carrying the data the
 -- filter needs; the marker class quarto-comment-hoist tells the filter to
 -- replace it with the hoisted margin callout.
-local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
-  local span = build_html_inline(comment_type, comment_text, author, html_color, config)
+local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
+  local span = build_html_inline(comment_type, comment_text, author, html_color, config, number)
   span.classes:insert("quarto-comment-hoist")
   span.attributes["data-comment-text"] = comment_text
   span.attributes["data-comment-color"] = html_color or ""
@@ -688,7 +699,7 @@ function utils.build_hoisted_div(span)
   return build_html_block(comment_type, comment_text, author, html_color, config)
 end
 
-local function build_latex(comment_type, comment_text, author, inline, config)
+local function build_latex(comment_type, comment_text, author, inline, config, number)
   local latex_color = resolve_latex_color(comment_type, author)
   local options = {}
   if inline then
@@ -1022,11 +1033,17 @@ function utils.render(args, kwargs, meta, forced_type, context)
     end
   end
 
+  -- Assign this comment's global, document-order number (inline and margin
+  -- alike, so the sequence never skips). Used as the displayed identifier and,
+  -- for margin comments, the hyperlink id.
+  _qtc_number = _qtc_number + 1
+  local number = _qtc_number
+
   -- Render based on format
   if is_html_format() then
     local html_color = resolve_html_color(comment_type, author)
     if inline then
-      local result = build_html_inline(comment_type, comment_text, author, html_color, config)
+      local result = build_html_inline(comment_type, comment_text, author, html_color, config, number)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
@@ -1036,7 +1053,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
       -- Non-inline comment placed mid-sentence: emit an inline placeholder badge
       -- carrying hoist data. comment-hoist.lua (when active) replaces it with a
       -- sibling margin callout; otherwise it degrades to a visible inline badge.
-      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
+      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
@@ -1044,7 +1061,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
       return result
     else
       -- Non-inline comment on its own line (block context): margin callout Div.
-      local result = build_html_block(comment_type, comment_text, author, html_color, config)
+      local result = build_html_block(comment_type, comment_text, author, html_color, config, number)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawBlock("html", FA_CSS_LINK))
@@ -1119,7 +1136,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
           build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
       end
     end)
-    return build_latex(comment_type, comment_text, author, inline, config)
+    return build_latex(comment_type, comment_text, author, inline, config, number)
   end
 
   -- Fallback for other formats
