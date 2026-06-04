@@ -13,13 +13,15 @@ local _listoftodos_injected = false
 local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
+local _latex_twocol_mpwidth_injected = false
 
 -- Replaces todonotes' default right-angle connector with a smooth dashed curve
 -- and thinner stroke. Two refinements over a naive inline redefinition:
 --
---   * Anchoring: the curve targets the TOP of the note box (its icon/author
---     line) rather than its vertical centre — north west for right-margin notes,
---     north east for left-margin notes, dropped 3mm to land on the first line.
+--   * Anchoring: the curve targets the TOP inner corner of the note box (its
+--     icon/author line) rather than its vertical centre, dropped 3mm to land on
+--     the first line — north west when the box sits to the right of the anchor,
+--     north east when it sits to the left.
 --
 --   * Z-order: LaTeX has no z-index, and todonotes draws its connector inside
 --     the margin box, whose specials can be painted over by boxes typeset
@@ -32,20 +34,32 @@ local _latex_bezier_injected = false
 --     kernel typesets BOTH arguments into save-boxes; only the side that matches
 --     the page is actually shipped. So both drawLineTo{Left,Right}Margin run for
 --     every note, but only one margin box ever reaches a page.
---   - Inside a save-box there is no current page, so coordinates cannot be
---     measured there (they collapse to the origin → connectors swoop to a
---     corner). And todonotes reuses the names inText/inNote for every note.
+--   - The side AND the page the kernel picks are decided in the output routine,
+--     NOT when the \marginpar is read in the galley. So neither the page (parity)
+--     nor the column (\if@firstcolumn) is reliably known at read time: a note
+--     whose anchor sits near a page or column break is placed on the next page /
+--     in the other column than the galley state suggests.
+--   - todonotes reuses the names inText/inNote for every note, and a
+--     remember-picture node referenced from another page does NOT clip cleanly.
 --
--- Solution: each side macro only creates per-note, uniquely-named coordinate
--- nodes (qtc@t@N at inText, qtc@{l,r}@N at the box's top corner) keyed by
--- todonotes' own note counter, and queues a draw for that side. The connectors
--- are queued as the margin box is built, so they are replayed on the page that
--- carries them (the per-page FG hook clears the queue each shipout). At shipout,
--- where the recorded nodes are valid, the FG hook replays only the side matching
--- this page's margin — right on a oneside doc or an odd page, left on an even
--- (verso) twoside page — which is exactly the side the kernel placed and thus
--- the only one whose note node was shipped. The curve direction is fixed per
--- side. This relies only on the two passes `remember picture` already needs.
+-- Solution — side-keyed nodes, with the true page AND side recorded at shipout:
+--   * \qtc@snap is called from both side macros. The RIGHT call saves a node
+--     qtc@r@N (at the box's north-west corner), the LEFT call saves qtc@l@N (north
+--     east), both keyed by todonotes' counter, plus qtc@t@N at inText. Only the
+--     box the kernel actually ships records real positions; the other side's node
+--     stays unplaced — so we must draw ONLY the shipped side (drawing the dead
+--     side's node lands the curve at the page origin).
+--   * Each call also writes the note's ship page AND its side to the .aux. The
+--     write whatsit travels inside the margin box, so it fires only for the box
+--     that ships and \thepage expands at shipout (exactly how \label captures a
+--     page). So the recorded side is the TRUE side the kernel chose — right on a
+--     oneside/odd page, left on a verso page, and by COLUMN in twocolumn — with
+--     no galley-time guess (read-time \if@firstcolumn / page parity are both
+--     unreliable when a note crosses a column or page break).
+--   * The FG hook replays the whole (never-cleared) queue on every page; each
+--     \qtc@drawconn draws once, only when the note's recorded page == the current
+--     page, toward its recorded side's node.
+--   This relies only on the two passes `remember picture` already needs.
 --
 -- Guarded by \ifx\qtc@bezier@done so the definitions run once even though the
 -- snippet is included once per shortcode type. All \if...\fi pairs below are
@@ -56,57 +70,77 @@ local BEZIER_CONNECTION_LATEX = [[
 \gdef\qtc@bezier@done{}%
 \RequirePackage{eso-pic}
 \gdef\qtc@connlist{}
-% Draw the connectors queued for the current page in the shipout foreground,
-% then clear the queue. Connectors are queued as their margin box is built
-% (i.e. during the page that carries them), so each page draws only its own —
-% a remember-picture node referenced from another page does NOT clip cleanly.
-% Before replaying, decide which margin this page uses (the same rule the kernel
-% uses to place \marginpar): the right margin on a oneside document or an odd
-% (recto) page, the left margin on an even (verso) page of a twoside document.
-% Only that side's note node was actually shipped/recorded.
+% Per-note ship page AND side, recovered from the .aux on the next run (written
+% by \qtc@snap from inside the shipped margin box). \qtc@noteinfo{id}{page}{side}
+% defines \qtc@pg@<id> and \qtc@side@<id>. Used to replay each connector on the
+% page that actually carries its note and toward the side the kernel actually
+% chose — both decided in the output routine, not when the \marginpar was read.
+\gdef\qtc@noteinfo#1#2#3{%
+  \expandafter\gdef\csname qtc@pg@#1\endcsname{#2}%
+  \expandafter\gdef\csname qtc@side@#1\endcsname{#3}}
+% Replay all queued connectors in the shipout foreground; each \qtc@drawconn
+% self-gates so only those whose note ships on THIS page actually draw (a
+% remember-picture node referenced from another page does NOT clip cleanly).
+% The queue is NOT cleared per page: a note can be pushed to a later page than
+% the one TeX was assembling when its \marginpar was read, so we cannot assume
+% "queued now => ships on the next shipout". Instead each connector carries its
+% note's true ship page (\qtc@pg@<id>, from the .aux) and is drawn only on that
+% page. \qtc@curpage exposes the current page for that comparison.
 \AddToShipoutPictureFG{%
   \makeatletter
-  \if@twoside\ifodd\c@page\gdef\qtc@want{r}\else\gdef\qtc@want{l}\fi
-  \else\gdef\qtc@want{r}\fi
-  \qtc@connlist\gdef\qtc@connlist{}%
+  \edef\qtc@curpage{\thepage}%
+  \qtc@connlist
   \makeatother
 }%
-% Replay one connector. #1 note id, #2 side (l/r), #3 out-angle, #4 in-angle.
-% The LaTeX kernel typesets BOTH \marginpar arguments, so the left and right
-% snapshots are both queued; we draw only the one matching this page's margin.
-\newcommand{\qtc@drawconn}[4]{%
-  \def\qtc@s{#2}%
-  \ifx\qtc@s\qtc@want
+% Replay one connector (#1 = note id). Drawn only when the note's recorded ship
+% page equals the current page (so the remembered nodes are all on this page),
+% toward the recorded side's node — qtc@r@id (box north-west) when the kernel put
+% the note in the right margin, qtc@l@id (north east) for the left. Only the
+% shipped side's node has a real position, so we must never draw the other one.
+\newcommand{\qtc@drawconn}[1]{%
+  % This note's recorded ship page (undefined -> \relax on the first pass, before
+  % the .aux exists, so nothing is drawn until page and side are known).
+  \edef\qtc@np{\csname qtc@pg@#1\endcsname}%
+  \ifx\qtc@np\qtc@curpage
     \begin{tikzpicture}[remember picture,overlay]%
       \edef\qtc@cl{\csname qtc@col@#1\endcsname}%
+      \edef\qtc@sd{\csname qtc@side@#1\endcsname}%
       \node[circle,draw=\qtc@cl,fill=white,minimum size=4pt,inner sep=0pt,%
             line width=1pt,outer sep=2pt] (qtc@cc) at (qtc@t@#1) {};%
-      \draw[draw=\qtc@cl,line width=0.5pt,dashed]%
-        (qtc@cc) to[out=#3,in=#4] (qtc@#2@#1);%
+      \if r\qtc@sd
+        \draw[draw=\qtc@cl,line width=0.5pt,dashed]%
+          (qtc@cc) to[out=0,in=180] (qtc@r@#1);%
+      \else
+        \draw[draw=\qtc@cl,line width=0.5pt,dashed]%
+          (qtc@cc) to[out=180,in=0] (qtc@l@#1);%
+      \fi
     \end{tikzpicture}%
   \fi
 }%
-% Snapshot the current note's endpoints into uniquely-named nodes and queue the
-% draw. #1 = side (l/r), #2 = box anchor, #3 out, #4 in. Both \marginpar
-% arguments call this; only the side matching the page is replayed.
-\newcommand{\qtc@snap}[4]{%
+% Snapshot the current note's endpoints into side-keyed, uniquely-named nodes,
+% record its ship page + side, and queue the draw. #1 = side (l/r), #2 = box
+% anchor. Called from BOTH \marginpar arguments, so each side's node is created
+% in its own box; only the box the kernel ships records real positions and fires
+% the write, so the recorded {page,side} is the true placement. The draw is
+% queued once per note (guarded by \qtc@q@<id>); the side is resolved at draw
+% time from the recorded value. The aux line guards itself so a stale .aux cannot
+% crash a later run with comments disabled (no \qtc@noteinfo defined then).
+\newcommand{\qtc@snap}[2]{%
   \edef\qtc@id{\the\value{@todonotes@numberoftodonotes}}%
   \begin{tikzpicture}[remember picture,overlay]%
     \coordinate (qtc@t@\qtc@id) at ([yshift=-0.25cm,xshift=-0.1cm]inText);%
     \coordinate (qtc@#1@\qtc@id) at ([yshift=-3mm]#2);%
   \end{tikzpicture}%
+  \protected@write\@auxout{}{\string\@ifundefined{qtc@noteinfo}{}{\string\qtc@noteinfo{\qtc@id}{\thepage}{#1}}}%
   \global\expandafter\edef\csname qtc@col@\qtc@id\endcsname{\@todonotes@currentlinecolor}%
-  \xdef\qtc@tmp{\noexpand\qtc@drawconn{\qtc@id}{#1}{#3}{#4}}%
-  \expandafter\g@addto@macro\expandafter\qtc@connlist\expandafter{\qtc@tmp}%
+  \@ifundefined{qtc@q@\qtc@id}{%
+    \global\expandafter\gdef\csname qtc@q@\qtc@id\endcsname{}%
+    \xdef\qtc@tmp{\noexpand\qtc@drawconn{\qtc@id}}%
+    \expandafter\g@addto@macro\expandafter\qtc@connlist\expandafter{\qtc@tmp}%
+  }{}%
 }%
-\renewcommand{\@todonotes@drawLineToRightMargin}{%
-  \if@todonotes@line%
-  \qtc@snap{r}{inNote.north west}{0}{180}%
-  \fi}%
-\renewcommand{\@todonotes@drawLineToLeftMargin}{%
-  \if@todonotes@line%
-  \qtc@snap{l}{inNote.north east}{180}{0}%
-  \fi}%
+\renewcommand{\@todonotes@drawLineToRightMargin}{\if@todonotes@line\qtc@snap{r}{inNote.north west}\fi}%
+\renewcommand{\@todonotes@drawLineToLeftMargin}{\if@todonotes@line\qtc@snap{l}{inNote.north east}\fi}%
 \fi
 \makeatother
 ]]
@@ -272,6 +306,7 @@ local function get_config(meta)
     show_author = true,
     show_list = false,
     wide_margins = false,
+    twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
     inner_pad = "0.3cm",
     frame_color = "gray!10",
@@ -309,6 +344,9 @@ local function get_config(meta)
   if config_meta.wide_margins ~= nil then
     local wm = meta_to_bool(config_meta.wide_margins)
     if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.twocolumn_marginparwidth then
+    config.twocolumn_marginparwidth = meta_to_string(config_meta.twocolumn_marginparwidth)
   end
   if config_meta.extra_margin then
     config.extra_margin = meta_to_string(config_meta.extra_margin)
@@ -698,6 +736,44 @@ local function build_latex(comment_type, comment_text, author, inline, config)
   end
 end
 
+-- Build the LaTeX preamble snippet that gives todonotes a usable marginpar
+-- width in TWO-COLUMN layouts (non-wide path). In single column the class
+-- default is fine and we emit nothing — the whole body is gated on
+-- \if@twocolumn, so single-column output is byte-for-byte unchanged.
+--
+-- In twocolumn the kernel places a note in the LEFT page margin for the first
+-- column and the RIGHT page margin for the second, both using the single
+-- \marginparwidth register. The class default is far too narrow there, so the
+-- note text gets crushed. We set it AtBeginDocument (after geometry, if loaded,
+-- has frozen \textwidth and the margins) to a value that fits.
+--
+-- width = "auto": take the TIGHTER of the two physical side margins, minus
+-- \marginparsep and a 2mm safety pad, so the box fits whichever margin it lands
+-- in. Otherwise use the literal value the user supplied.
+local function build_twocolumn_marginparwidth_header(width_spec)
+  local set_width
+  if not width_spec or width_spec == "" or width_spec:lower() == "auto" then
+    set_width = table.concat({
+      "    \\newlength{\\qtc@mpL}\\newlength{\\qtc@mpR}%",
+      "    \\setlength{\\qtc@mpL}{\\dimexpr 1in+\\oddsidemargin-\\marginparsep-2mm\\relax}%",
+      "    \\setlength{\\qtc@mpR}{\\dimexpr \\paperwidth-1in-\\oddsidemargin-\\textwidth-\\marginparsep-2mm\\relax}%",
+      "    \\ifdim\\qtc@mpL<\\qtc@mpR \\setlength{\\marginparwidth}{\\qtc@mpL}%",
+      "    \\else \\setlength{\\marginparwidth}{\\qtc@mpR}\\fi",
+    }, "\n")
+  else
+    set_width = "    \\setlength{\\marginparwidth}{" .. width_spec .. "}%"
+  end
+
+  return table.concat({
+    "\\makeatletter",
+    "\\AtBeginDocument{%",
+    "  \\if@twocolumn",
+    set_width,
+    "  \\fi}%",
+    "\\makeatother",
+  }, "\n")
+end
+
 -- Build the LaTeX preamble snippet that widens the page for draft margin notes.
 -- Guards against multiple injections with a LaTeX-level flag so it is safe to
 -- call once per shortcode type (up to 4 times per document).
@@ -753,20 +829,36 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     -- Saved originals and precomputed wide values for the toggle (filled in
     -- \AtBeginDocument, where \paperwidth is still the original).
     "\\newlength{\\qtc@origPaperwidth}%",
+    "\\newlength{\\qtc@origOddsidemargin}%",
     "\\newlength{\\qtc@origEvensidemargin}%",
     "\\newlength{\\qtc@origMarginparsep}%",
     "\\newlength{\\qtc@origMarginparwidth}%",
     "\\newlength{\\qtc@wideMarginparsep}%",
     "\\newlength{\\qtc@wideMarginparwidth}%",
     -- \qtcWideOn: widen the physical page (engine-specific primitive, \ifdefined
-    -- guarded) and \paperwidth (pgf `current page` ref), grow the outer margin on
-    -- twoside, and place notes inside the grey zone.
+    -- guarded) and \paperwidth (pgf `current page` ref), then place notes in the
+    -- grey zone. TWOCOLUMN differs from single column: the kernel puts first-column
+    -- notes in the LEFT page margin and second-column notes in the RIGHT, so we
+    -- must reserve a zone on BOTH sides. We grow the paper by 2*extra and shift the
+    -- text block right by extra (oddsidemargin += extra), which leaves `extra` of
+    -- new paper on each side while preserving \textwidth and the columns. The same
+    -- \marginparsep / \marginparwidth then land both sides' notes symmetrically in
+    -- their zones (verified for a centred text block). Single column keeps the
+    -- original behaviour (grow right only; outer edge on twoside) in the \else.
     "\\gdef\\qtcWideOn{%",
     "  \\qtcWidetrue",
-    "  \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}%",
-    "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
-    "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
-    "  \\if@twoside\\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\if@twocolumn",
+    "    \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}%",
+    "    \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}\\fi%",
+    "    \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}\\fi%",
+    "    \\setlength{\\oddsidemargin}{\\dimexpr\\qtc@origOddsidemargin+\\qtcExtraMargin\\relax}%",
+    "    \\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}%",
+    "  \\else",
+    "    \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}%",
+    "    \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "    \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "    \\if@twoside\\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\fi",
     "  \\setlength{\\marginparsep}{\\qtc@wideMarginparsep}%",
     "  \\setlength{\\marginparwidth}{\\qtc@wideMarginparwidth}%",
     "}%",
@@ -777,7 +869,12 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "  \\setlength{\\paperwidth}{\\qtc@origPaperwidth}%",
     "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\qtc@origPaperwidth}\\fi%",
     "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\qtc@origPaperwidth}\\fi%",
-    "  \\if@twoside\\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}\\fi%",
+    "  \\if@twocolumn",
+    "    \\setlength{\\oddsidemargin}{\\qtc@origOddsidemargin}%",
+    "    \\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}%",
+    "  \\else",
+    "    \\if@twoside\\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}\\fi%",
+    "  \\fi",
     "  \\setlength{\\marginparsep}{\\qtc@origMarginparsep}%",
     "  \\setlength{\\marginparwidth}{\\qtc@origMarginparwidth}%",
     "}%",
@@ -789,6 +886,7 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "\\AtBeginDocument{%",
     "  \\makeatletter",
     "  \\setlength{\\qtc@origPaperwidth}{\\paperwidth}%",
+    "  \\setlength{\\qtc@origOddsidemargin}{\\oddsidemargin}%",
     "  \\setlength{\\qtc@origEvensidemargin}{\\evensidemargin}%",
     "  \\setlength{\\qtc@origMarginparsep}{\\marginparsep}%",
     "  \\setlength{\\qtc@origMarginparwidth}{\\marginparwidth}%",
@@ -810,6 +908,29 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   \makeatletter
   \ifqtcWide
   \begin{tikzpicture}[remember picture,overlay]
+    \if@twocolumn
+      % Two-column: a zone on BOTH sides (left-column notes go left, right-column
+      % notes go right), no page-parity alternation. Right zone:
+      \fill[qtcFrameColor]
+        ([xshift=-\qtcExtraMargin]current page.north east)
+        rectangle (current page.south east);
+      \draw[dashed,qtcLineColor,line width=0.5pt]
+        ([xshift=-\qtcExtraMargin]current page.north east) --
+        ([xshift=-\qtcExtraMargin]current page.south east);
+      \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+        at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
+        {Comments};
+      % Left zone:
+      \fill[qtcFrameColor]
+        (current page.north west)
+        rectangle ([xshift=\qtcExtraMargin]current page.south west);
+      \draw[dashed,qtcLineColor,line width=0.5pt]
+        ([xshift=\qtcExtraMargin]current page.north west) --
+        ([xshift=\qtcExtraMargin]current page.south west);
+      \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+        at ($(current page.north west)+(0.5*\qtcExtraMargin,0)$)
+        {Comments};
+    \else
     \if@twoside
       \ifodd\value{page}
         \fill[qtcFrameColor]
@@ -842,7 +963,8 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
       \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
         at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
         {Comments};
-    \fi
+    \fi% closes \if@twoside
+    \fi% closes \if@twocolumn
   \end{tikzpicture}%
   \fi% closes \ifqtcWide (grey zone gating)
   \makeatother
@@ -988,6 +1110,13 @@ function utils.render(args, kwargs, meta, forced_type, context)
             config.inner_pad,
             config.frame_color,
             config.frame_line))
+      end
+      -- Non-wide path: give todonotes a usable marginpar width in twocolumn.
+      -- The wide path sets \marginparwidth itself, so this is mutually exclusive.
+      if not config.wide_margins and not _latex_twocol_mpwidth_injected then
+        _latex_twocol_mpwidth_injected = true
+        quarto.doc.include_text("in-header",
+          build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
       end
     end)
     return build_latex(comment_type, comment_text, author, inline, config)
