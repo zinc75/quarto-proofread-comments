@@ -796,20 +796,36 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     -- Saved originals and precomputed wide values for the toggle (filled in
     -- \AtBeginDocument, where \paperwidth is still the original).
     "\\newlength{\\qtc@origPaperwidth}%",
+    "\\newlength{\\qtc@origOddsidemargin}%",
     "\\newlength{\\qtc@origEvensidemargin}%",
     "\\newlength{\\qtc@origMarginparsep}%",
     "\\newlength{\\qtc@origMarginparwidth}%",
     "\\newlength{\\qtc@wideMarginparsep}%",
     "\\newlength{\\qtc@wideMarginparwidth}%",
     -- \qtcWideOn: widen the physical page (engine-specific primitive, \ifdefined
-    -- guarded) and \paperwidth (pgf `current page` ref), grow the outer margin on
-    -- twoside, and place notes inside the grey zone.
+    -- guarded) and \paperwidth (pgf `current page` ref), then place notes in the
+    -- grey zone. TWOCOLUMN differs from single column: the kernel puts first-column
+    -- notes in the LEFT page margin and second-column notes in the RIGHT, so we
+    -- must reserve a zone on BOTH sides. We grow the paper by 2*extra and shift the
+    -- text block right by extra (oddsidemargin += extra), which leaves `extra` of
+    -- new paper on each side while preserving \textwidth and the columns. The same
+    -- \marginparsep / \marginparwidth then land both sides' notes symmetrically in
+    -- their zones (verified for a centred text block). Single column keeps the
+    -- original behaviour (grow right only; outer edge on twoside) in the \else.
     "\\gdef\\qtcWideOn{%",
     "  \\qtcWidetrue",
-    "  \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}%",
-    "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
-    "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
-    "  \\if@twoside\\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\if@twocolumn",
+    "    \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}%",
+    "    \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}\\fi%",
+    "    \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+2\\qtcExtraMargin\\relax}\\fi%",
+    "    \\setlength{\\oddsidemargin}{\\dimexpr\\qtc@origOddsidemargin+\\qtcExtraMargin\\relax}%",
+    "    \\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}%",
+    "  \\else",
+    "    \\setlength{\\paperwidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}%",
+    "    \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "    \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\dimexpr\\qtc@origPaperwidth+\\qtcExtraMargin\\relax}\\fi%",
+    "    \\if@twoside\\setlength{\\evensidemargin}{\\dimexpr\\qtc@origEvensidemargin+\\qtcExtraMargin\\relax}\\fi%",
+    "  \\fi",
     "  \\setlength{\\marginparsep}{\\qtc@wideMarginparsep}%",
     "  \\setlength{\\marginparwidth}{\\qtc@wideMarginparwidth}%",
     "}%",
@@ -820,7 +836,12 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "  \\setlength{\\paperwidth}{\\qtc@origPaperwidth}%",
     "  \\ifdefined\\pdfpagewidth\\setlength{\\pdfpagewidth}{\\qtc@origPaperwidth}\\fi%",
     "  \\ifdefined\\pagewidth\\setlength{\\pagewidth}{\\qtc@origPaperwidth}\\fi%",
-    "  \\if@twoside\\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}\\fi%",
+    "  \\if@twocolumn",
+    "    \\setlength{\\oddsidemargin}{\\qtc@origOddsidemargin}%",
+    "    \\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}%",
+    "  \\else",
+    "    \\if@twoside\\setlength{\\evensidemargin}{\\qtc@origEvensidemargin}\\fi%",
+    "  \\fi",
     "  \\setlength{\\marginparsep}{\\qtc@origMarginparsep}%",
     "  \\setlength{\\marginparwidth}{\\qtc@origMarginparwidth}%",
     "}%",
@@ -832,6 +853,7 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
     "\\AtBeginDocument{%",
     "  \\makeatletter",
     "  \\setlength{\\qtc@origPaperwidth}{\\paperwidth}%",
+    "  \\setlength{\\qtc@origOddsidemargin}{\\oddsidemargin}%",
     "  \\setlength{\\qtc@origEvensidemargin}{\\evensidemargin}%",
     "  \\setlength{\\qtc@origMarginparsep}{\\marginparsep}%",
     "  \\setlength{\\qtc@origMarginparwidth}{\\marginparwidth}%",
@@ -853,6 +875,29 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   \makeatletter
   \ifqtcWide
   \begin{tikzpicture}[remember picture,overlay]
+    \if@twocolumn
+      % Two-column: a zone on BOTH sides (left-column notes go left, right-column
+      % notes go right), no page-parity alternation. Right zone:
+      \fill[qtcFrameColor]
+        ([xshift=-\qtcExtraMargin]current page.north east)
+        rectangle (current page.south east);
+      \draw[dashed,qtcLineColor,line width=0.5pt]
+        ([xshift=-\qtcExtraMargin]current page.north east) --
+        ([xshift=-\qtcExtraMargin]current page.south east);
+      \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+        at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
+        {Comments};
+      % Left zone:
+      \fill[qtcFrameColor]
+        (current page.north west)
+        rectangle ([xshift=\qtcExtraMargin]current page.south west);
+      \draw[dashed,qtcLineColor,line width=0.5pt]
+        ([xshift=\qtcExtraMargin]current page.north west) --
+        ([xshift=\qtcExtraMargin]current page.south west);
+      \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
+        at ($(current page.north west)+(0.5*\qtcExtraMargin,0)$)
+        {Comments};
+    \else
     \if@twoside
       \ifodd\value{page}
         \fill[qtcFrameColor]
@@ -885,7 +930,8 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
       \node[anchor=north,font=\scriptsize\sffamily,text=qtcLineColor,yshift=-6pt]
         at ($(current page.north east)+(-0.5*\qtcExtraMargin,0)$)
         {Comments};
-    \fi
+    \fi% closes \if@twoside
+    \fi% closes \if@twocolumn
   \end{tikzpicture}%
   \fi% closes \ifqtcWide (grey zone gating)
   \makeatother
