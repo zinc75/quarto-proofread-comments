@@ -9,11 +9,85 @@ end
 
 local FA_CSS_LINK = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />'
 local _fa_css_injected = false
+local _html_hover_injected = false
+
+-- Styling for the numbered-mode HTML feature only (the in-text anchor and the
+-- hover/:target highlight). Injected as a <style> because an extension's
+-- formats.html.css is not applied when used as a filter, and because the rest of
+-- the comment styling is emitted inline per element — so we deliberately do NOT
+-- inject the whole comments.css (its base/dark-mode rules would double up with,
+-- and override, those inline styles). The hover effect is deliberately light: a
+-- small grow plus a thin outer ring in the author colour.
+local ANCHOR_CSS = [[
+<style>
+.quarto-comment-anchor {
+  text-decoration: none;
+  font-size: 0.8em;
+  vertical-align: super;
+  padding: 0 0.1em;
+  cursor: pointer;
+  display: inline-block;
+  transition: transform 0.12s ease-in-out, filter 0.12s ease-in-out;
+}
+/* The icon-only line for a block-context comment: take as little vertical room
+   as possible so it does not space out the surrounding paragraphs. */
+.quarto-comment-anchor-line {
+  margin: 0 !important;
+  line-height: 1;
+}
+.quarto-comment-anchor:hover,
+.quarto-comment-anchor.quarto-comment-hl {
+  transform: scale(1.4);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.quarto-comment-block.callout {
+  transition: transform 0.12s ease-in-out, box-shadow 0.12s ease-in-out;
+}
+.quarto-comment-block.callout:target,
+.quarto-comment-block.callout.quarto-comment-hl {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px var(--comment-color, #6c757d),
+              0 4px 12px rgba(0, 0, 0, 0.18);
+}
+</style>
+]]
+
+-- Hovering an in-text anchor highlights its margin callout (and vice versa). A
+-- CSS sibling selector cannot reach across the DOM (anchor inside the paragraph,
+-- callout hoisted elsewhere), so a tiny vanilla script wires the two by id.
+local HTML_HOVER_SCRIPT = [[
+<script>
+(function () {
+  function wire() {
+    document.querySelectorAll('a.quarto-comment-anchor').forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (href.charAt(0) !== '#') return;
+      var target = document.getElementById(href.slice(1));
+      if (!target) return;
+      var on = function () { target.classList.add('quarto-comment-hl'); a.classList.add('quarto-comment-hl'); };
+      var off = function () { target.classList.remove('quarto-comment-hl'); a.classList.remove('quarto-comment-hl'); };
+      a.addEventListener('mouseenter', on);
+      a.addEventListener('mouseleave', off);
+      target.addEventListener('mouseenter', on);
+      target.addEventListener('mouseleave', off);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else { wire(); }
+})();
+</script>
+]]
 local _listoftodos_injected = false
 local _latex_tdo_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
+local _latex_numbered_injected = false
 local _latex_twocol_mpwidth_injected = false
+
+-- Global, document-order counter shared by all comments (inline and margin, both
+-- formats), so numbering never skips. Assigned once per comment in utils.render.
+local _qtc_number = 0
 
 -- Replaces todonotes' default right-angle connector with a smooth dashed curve
 -- and thinner stroke. Two refinements over a naive inline redefinition:
@@ -141,6 +215,85 @@ local BEZIER_CONNECTION_LATEX = [[
 }%
 \renewcommand{\@todonotes@drawLineToRightMargin}{\if@todonotes@line\qtc@snap{r}{inNote.north west}\fi}%
 \renewcommand{\@todonotes@drawLineToLeftMargin}{\if@todonotes@line\qtc@snap{l}{inNote.north east}\fi}%
+\fi
+\makeatother
+]]
+
+-- Numbered-anchor mode (default). No connecting line: a clickable icon+number
+-- marker is drawn at the in-text anchor and linked (hyperref) to the margin box.
+--
+-- The marker is drawn in the shipout FOREGROUND (eso-pic FG), above the page,
+-- so it is visible (an inline overlay would sit behind the text) and takes no
+-- flow space — exactly like the old connector circle. The marker's full LaTeX
+-- (icon, number, colour, \hyperlink) is prebuilt per note in Lua and handed over
+-- in \qtc@marker; the snapshot hook copies it into a per-note slot and queues the
+-- draw. Because the marker sits at the text (not the box), there is no side and
+-- no box node to track — only the in-text anchor and its page (recorded via the
+-- .aux so the marker replays on the page that actually carries the anchor, even
+-- if todonotes floats the box elsewhere). All \if...\fi pairs are balanced for
+-- the skipped-branch scan of the \ifx guard.
+local NUMBERED_MARKER_LATEX = [[
+\makeatletter
+\ifx\qtc@numbered@done\undefined
+\gdef\qtc@numbered@done{}%
+\RequirePackage{eso-pic}
+\RequirePackage{graphicx}
+\providecommand{\hypertarget}[2]{#2}\providecommand{\hyperlink}[2]{#2}%
+\providecommand{\Hy@raisedlink}[1]{#1}%
+\newcounter{qtccomment}%
+% Raise a jump target to the top of its line so clicking lands on the box's first
+% line, not a couple of lines lower.
+\gdef\qtcraise#1{\Hy@raisedlink{#1}}%
+\gdef\qtc@mklist{}
+\gdef\qtc@mkpagedef#1#2{\expandafter\gdef\csname qtc@pg@#1\endcsname{#2}}
+\AddToShipoutPictureFG{%
+  \makeatletter
+  \edef\qtc@curpage{\thepage}%
+  \qtc@mklist
+  \makeatother
+}%
+% Draw one marker (#1 = todonotes note id) on its recorded page only: a small
+% (<= line) clickable icon+number node just below the in-text anchor qtc@t@<id>,
+% plus a short arrow pointing up to the exact insertion point. Number, colour and
+% icon were frozen per note in \qtc@snapmk (the live counter/macros would hold the
+% LAST note's values by shipout).
+\newcommand{\qtc@drawmk}[1]{%
+  \edef\qtc@np{\csname qtc@pg@#1\endcsname}%
+  \ifx\qtc@np\qtc@curpage
+    \edef\qtc@n{\csname qtc@num@#1\endcsname}%
+    \edef\qtc@c{\csname qtc@col@#1\endcsname}%
+    \begin{tikzpicture}[remember picture,overlay]%
+      \node[anchor=north,inner sep=0pt] (qtc@m@#1)
+        at ([yshift=-0.30\baselineskip,xshift=-0.12cm]qtc@t@#1)
+        {\resizebox{!}{0.4\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}};%
+      \draw[\qtc@c,line width=0.3pt,->,>=stealth,shorten >=0.5pt]
+        (qtc@m@#1.north) -- (qtc@t@#1);%
+    \end{tikzpicture}%
+  \fi
+}%
+% Snapshot the in-text anchor and freeze this note's number (document-order
+% LaTeX counter), colour and icon into per-note slots; queue the draw. Called
+% from both \marginpar arguments, but only the shipped box records a valid anchor
+% and fires the write; queued once per note. \qtccol / \qtcico are @-free macros
+% set just before \todo (visible here); the number is the qtccomment counter,
+% which at this point equals this note's value.
+\newcommand{\qtc@snapmk}{%
+  \edef\qtc@id{\the\value{@todonotes@numberoftodonotes}}%
+  \begin{tikzpicture}[remember picture,overlay]%
+    \coordinate (qtc@t@\qtc@id) at (inText);%
+  \end{tikzpicture}%
+  \protected@write\@auxout{}{\string\@ifundefined{qtc@mkpagedef}{}{\string\qtc@mkpagedef{\qtc@id}{\thepage}}}%
+  \global\expandafter\edef\csname qtc@num@\qtc@id\endcsname{\arabic{qtccomment}}%
+  \global\expandafter\edef\csname qtc@col@\qtc@id\endcsname{\qtccol}%
+  \global\expandafter\let\csname qtc@ico@\qtc@id\endcsname\qtcico
+  \@ifundefined{qtc@q@\qtc@id}{%
+    \global\expandafter\gdef\csname qtc@q@\qtc@id\endcsname{}%
+    \xdef\qtc@tmp{\noexpand\qtc@drawmk{\qtc@id}}%
+    \expandafter\g@addto@macro\expandafter\qtc@mklist\expandafter{\qtc@tmp}%
+  }{}%
+}%
+\renewcommand{\@todonotes@drawLineToRightMargin}{\qtc@snapmk}%
+\renewcommand{\@todonotes@drawLineToLeftMargin}{\qtc@snapmk}%
 \fi
 \makeatother
 ]]
@@ -305,6 +458,7 @@ local function get_config(meta)
     enabled = true,
     show_author = true,
     show_list = false,
+    connector = "numbered",
     wide_margins = false,
     twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
@@ -344,6 +498,12 @@ local function get_config(meta)
   if config_meta.wide_margins ~= nil then
     local wm = meta_to_bool(config_meta.wide_margins)
     if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.connector then
+    local c = meta_to_string(config_meta.connector):lower()
+    if c == "bezier" or c == "numbered" then
+      config.connector = c
+    end
   end
   if config_meta.twocolumn_marginparwidth then
     config.twocolumn_marginparwidth = meta_to_string(config_meta.twocolumn_marginparwidth)
@@ -523,7 +683,7 @@ local function parse_inlines(text)
   return pandoc.List({ pandoc.Str(text) })
 end
 
-local function build_html_inline(comment_type, comment_text, author, html_color, config)
+local function build_html_inline(comment_type, comment_text, author, html_color, config, number)
   local classes = { "quarto-comment", "quarto-comment-inline", "comment-" .. comment_type }
   local attributes = {
     ["data-comment-type"] = comment_type,
@@ -573,7 +733,7 @@ end
 -- Builds the inner callout Div (without the column-margin wrapper). Shared by
 -- the block path (wrapped in a div.column-margin) and the inline path (wrapped
 -- in a span.column-margin so it does not break the host paragraph).
-local function build_html_callout(comment_type, comment_text, author, html_color, config)
+local function build_html_callout(comment_type, comment_text, author, html_color, config, number)
   -- Build the callout classes
   local callout_classes = {
     "quarto-comment-block",
@@ -638,20 +798,57 @@ local function build_html_callout(comment_type, comment_text, author, html_color
     pandoc.Attr("", { "callout-body-container", "callout-body" })
   )
 
+  -- An id (qtc-<n>) lets an in-text anchor link to this callout (HTML).
+  local callout_id = number and ("qtc-" .. number) or ""
   local callout = pandoc.Div(
     { header, body },
-    pandoc.Attr("", callout_classes, callout_attributes)
+    pandoc.Attr(callout_id, callout_classes, callout_attributes)
   )
 
   return callout
 end
 
-local function build_html_block(comment_type, comment_text, author, html_color, config)
+-- Small in-text anchor (HTML): the comment's icon in the author colour, linked
+-- to its margin callout (#qtc-<n>). Returns nil when there is no number to link.
+local function build_anchor(comment_type, html_color, number)
+  if not number then return nil end
+  local icon_html = COMMENT_ICONS[comment_type] or COMMENT_ICONS.comment
+  local attrs = {}
+  if html_color and html_color ~= "" then attrs.style = "color: " .. html_color end
+  return pandoc.Link(
+    { pandoc.RawInline("html", icon_html) },
+    "#qtc-" .. number, "",
+    pandoc.Attr("", { "quarto-comment-anchor", "comment-" .. comment_type }, attrs)
+  )
+end
+
+local function build_html_block(comment_type, comment_text, author, html_color, config, number, with_anchor)
   -- Wrap the callout in the margin container (block context).
-  return pandoc.Div(
-    { build_html_callout(comment_type, comment_text, author, html_color, config) },
+  local margin = pandoc.Div(
+    { build_html_callout(comment_type, comment_text, author, html_color, config, number) },
     pandoc.Attr("", { "no-row-height", "column-margin", "column-container" })
   )
+  -- For a stand-alone (block-context) comment, also drop a clickable in-text
+  -- icon in the main column so every margin comment is reachable from the text,
+  -- like the mid-sentence ones. (The hoist path passes with_anchor=false because
+  -- it inserts the anchor itself, in the middle of the host sentence.)
+  if with_anchor then
+    local anchor = build_anchor(comment_type, html_color, number)
+    if anchor then
+      -- Wrap the callout in a Div so Quarto lays it out as a page-columns grid
+      -- (body + margin). The in-text icon goes in a small classed Div (the grid
+      -- body item) rather than a bare <a> (which, as a direct grid child, would
+      -- stretch to the whole column width) or a <p> (whose paragraph margins
+      -- would punch a vertical hole between the surrounding paragraphs). The CSS
+      -- zeroes that line's margins so it barely takes any room.
+      local anchor_line = pandoc.Div(
+        { pandoc.Plain({ anchor }) },
+        pandoc.Attr("", { "quarto-comment-anchor-line" })
+      )
+      return pandoc.Div({ anchor_line, margin })
+    end
+  end
+  return margin
 end
 
 -- Inline-context placeholder: a non-inline comment placed mid-sentence must
@@ -663,13 +860,25 @@ end
 -- badge (graceful fallback if the filter is not active) carrying the data the
 -- filter needs; the marker class quarto-comment-hoist tells the filter to
 -- replace it with the hoisted margin callout.
-local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
-  local span = build_html_inline(comment_type, comment_text, author, html_color, config)
+local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
+  local span = build_html_inline(comment_type, comment_text, author, html_color, config, number)
   span.classes:insert("quarto-comment-hoist")
   span.attributes["data-comment-text"] = comment_text
   span.attributes["data-comment-color"] = html_color or ""
   span.attributes["data-comment-show-author"] = config.show_author and "true" or "false"
+  span.attributes["data-comment-number"] = number and tostring(number) or ""
   return span
+end
+
+-- Build the small in-text anchor (HTML): the comment's icon in the author colour,
+-- linked to its hoisted callout (#qtc-<n>). Used by comment-hoist.lua to replace
+-- a mid-sentence placeholder, so the reader gets a clickable mark in the text and
+-- the full comment floats to the margin.
+function utils.build_anchor_from_span(span)
+  local a = span.attributes
+  local number = a["data-comment-number"]
+  if not number or number == "" then return nil end
+  return build_anchor(a["data-comment-type"] or "comment", a["data-comment-color"], number)
 end
 
 -- Rebuild the margin callout Div from a hoist placeholder's data attributes.
@@ -685,20 +894,29 @@ function utils.build_hoisted_div(span)
     author = { id = a["data-comment-author"], name = a["data-comment-author-name"] }
   end
   local config = { show_author = (a["data-comment-show-author"] == "true") }
-  return build_html_block(comment_type, comment_text, author, html_color, config)
+  local number = a["data-comment-number"]
+  if number == "" then number = nil end
+  return build_html_block(comment_type, comment_text, author, html_color, config, number)
 end
 
-local function build_latex(comment_type, comment_text, author, inline, config)
+local function build_latex(comment_type, comment_text, author, inline, config, number)
   local latex_color = resolve_latex_color(comment_type, author)
+  local base_color = latex_color:match("^([^!]+)") or latex_color
+  -- "numbered" is the default; "bezier" reproduces the legacy connecting line.
+  local numbered = (config.connector ~= "bezier")
+
   local options = {}
   if inline then
     table.insert(options, "inline")
+  end
+  -- Numbered margin notes draw no todonotes line (the link is the connector).
+  if numbered and not inline then
+    table.insert(options, "noline")
   end
   if latex_color and latex_color ~= "" then
     -- For plain color names (auto-assigned via \definecolor), dilute the
     -- background so the note stays light; user-defined tints (e.g. "blue!20")
     -- are used as-is since they already carry the desired opacity.
-    local base_color = latex_color:match("^([^!]+)") or latex_color
     local bg_color = latex_color:find("!", 1, true)
       and latex_color
       or  (latex_color .. "!20!white")
@@ -706,34 +924,62 @@ local function build_latex(comment_type, comment_text, author, inline, config)
     table.insert(options, "bordercolor=" .. base_color)
     table.insert(options, "linecolor=" .. base_color)
   end
-  local option_string = ""
   table.insert(options, "size=\\footnotesize")
-  if #options > 0 then
-    option_string = "[" .. table.concat(options, ",") .. "]"
-  end
 
-  local pieces = {}
-
-  -- Icon: dilute the base color to 60% so the outline icon looks lighter
-  -- and less visually heavy than a fully saturated glyph in print output.
-  local icon_color = (latex_color:match("^([^!]+)") or latex_color) .. "!70"
+  -- Icon: dilute the base color to 70% inside the box so the outline glyph looks
+  -- lighter than a fully saturated one in print.
   local fa_cmd = LATEX_FA_ICONS[comment_type] or LATEX_FA_ICONS.comment
-  local emoji_cmd = "\\textcolor{" .. icon_color .. "}{" .. fa_cmd .. "}"
-  table.insert(pieces, emoji_cmd .. " ")
+  local icon_box = "\\textcolor{" .. base_color .. "!70}{" .. fa_cmd .. "}"
 
   local show_author = config.show_author and author and author.name and author.name ~= ""
-  if show_author then
-    table.insert(pieces, "\\textbf{" .. escape_latex(author.name) .. ":} ")
-  end
-  table.insert(pieces, escape_latex_with_math(comment_text))
-  local content = table.concat(pieces)
+  local author_prefix = show_author
+    and ("\\textbf{" .. escape_latex(author.name) .. ":} ") or ""
+  local body = escape_latex_with_math(comment_text)
 
-  local todo = string.format("\\todo%s{%s}", option_string, content)
-  if inline then
-    return pandoc.RawInline("tex", todo)
+  -- The displayed number is a LaTeX counter (qtccomment), NOT the Lua number:
+  -- LaTeX steps it in DOCUMENT order at typeset time, whereas the Lua counter
+  -- follows shortcode-expansion order (Quarto expands mid-sentence/inline
+  -- shortcodes last, which would misnumber them).
+  local num = "\\textcolor{" .. base_color .. "}{\\textbf{\\arabic{qtccomment}}}"
+
+  local content
+  if numbered then
+    -- Caption for the .tdo / list-of-todos: icon, number, author, text. No
+    -- hyperref here (todonotes writes the caption unprotected and would choke on
+    -- \hypertarget), but \arabic is robust and \addcontentsline's \protected@write
+    -- expands it at call time (counter = this note's value), so the list shows the
+    -- correct document-order number.
+    table.insert(options, "caption={" .. icon_box .. "\\," .. num
+      .. " " .. author_prefix .. body .. "}")
+    -- Displayed box: a raised jump target (so the anchor lands on the first line),
+    -- icon + number on the first line, then a forced break so the author (if any)
+    -- and the text always start on the second line — never crowding/overflowing
+    -- the header in a narrow margin.
+    content = "\\qtcraise{\\hypertarget{qtc-\\arabic{qtccomment}}{}}"
+      .. icon_box .. "\\," .. num .. "\\\\" .. author_prefix .. body
   else
+    content = icon_box .. " " .. author_prefix .. body
+  end
+
+  local option_string = "[" .. table.concat(options, ",") .. "]"
+  local todo = string.format("\\todo%s{%s}", option_string, content)
+
+  if not numbered then
+    if inline then return pandoc.RawInline("tex", todo) end
     return pandoc.RawBlock("tex", todo)
   end
+
+  -- Numbered mode. Step the document-order counter, and (for margin notes) hand
+  -- the colour and icon to the foreground-marker machinery via @-free macros
+  -- (\qtccol / \qtcico, read by \qtc@snapmk). \def/\stepcounter do not typeset,
+  -- so \todo still backs up its vertical space and the note takes no extra line.
+  if inline then
+    -- Inline note: numbered label only, no margin marker.
+    return pandoc.RawInline("tex", "\\stepcounter{qtccomment}" .. todo)
+  end
+  local setup = "\\def\\qtccol{" .. base_color .. "}\\def\\qtcico{" .. fa_cmd
+    .. "}\\stepcounter{qtccomment}%\n"
+  return pandoc.RawBlock("tex", setup .. todo)
 end
 
 -- Build the LaTeX preamble snippet that gives todonotes a usable marginpar
@@ -1022,11 +1268,24 @@ function utils.render(args, kwargs, meta, forced_type, context)
     end
   end
 
+  -- Assign this comment's global, document-order number (inline and margin
+  -- alike, so the sequence never skips). Used as the displayed identifier and,
+  -- for margin comments, the hyperlink id.
+  _qtc_number = _qtc_number + 1
+  local number = _qtc_number
+
   -- Render based on format
   if is_html_format() then
+    if not _html_hover_injected then
+      _html_hover_injected = true
+      pcall(function()
+        quarto.doc.include_text("in-header", ANCHOR_CSS)
+        quarto.doc.include_text("after-body", HTML_HOVER_SCRIPT)
+      end)
+    end
     local html_color = resolve_html_color(comment_type, author)
     if inline then
-      local result = build_html_inline(comment_type, comment_text, author, html_color, config)
+      local result = build_html_inline(comment_type, comment_text, author, html_color, config, number)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
@@ -1036,15 +1295,16 @@ function utils.render(args, kwargs, meta, forced_type, context)
       -- Non-inline comment placed mid-sentence: emit an inline placeholder badge
       -- carrying hoist data. comment-hoist.lua (when active) replaces it with a
       -- sibling margin callout; otherwise it degrades to a visible inline badge.
-      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config)
+      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
       end
       return result
     else
-      -- Non-inline comment on its own line (block context): margin callout Div.
-      local result = build_html_block(comment_type, comment_text, author, html_color, config)
+      -- Non-inline comment on its own line (block context): margin callout Div
+      -- plus an in-text icon anchor in the main column.
+      local result = build_html_block(comment_type, comment_text, author, html_color, config, number, true)
       if not _fa_css_injected then
         _fa_css_injected = true
         result.content:insert(1, pandoc.RawBlock("html", FA_CSS_LINK))
@@ -1098,9 +1358,21 @@ function utils.render(args, kwargs, meta, forced_type, context)
           "\\end{tcolorbox}" ..
           "\\fi\\makeatother\n")
       end
-      if not _latex_bezier_injected then
-        _latex_bezier_injected = true
-        quarto.doc.include_text("in-header", BEZIER_CONNECTION_LATEX)
+      if config.connector == "bezier" then
+        if not _latex_bezier_injected then
+          _latex_bezier_injected = true
+          quarto.doc.include_text("in-header", BEZIER_CONNECTION_LATEX)
+        end
+      else
+        -- Numbered mode: draw the clickable icon+number marker in the shipout
+        -- foreground and link it to the box via hyperref (Quarto loads hyperref;
+        -- the \providecommand guards inside the snippet keep the marker rendering
+        -- if it somehow is not present).
+        if not _latex_numbered_injected then
+          _latex_numbered_injected = true
+          quarto.doc.use_latex_package("hyperref")
+          quarto.doc.include_text("in-header", NUMBERED_MARKER_LATEX)
+        end
       end
       if config.wide_margins and not _latex_wide_margins_injected then
         _latex_wide_margins_injected = true
@@ -1119,7 +1391,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
           build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
       end
     end)
-    return build_latex(comment_type, comment_text, author, inline, config)
+    return build_latex(comment_type, comment_text, author, inline, config, number)
   end
 
   -- Fallback for other formats

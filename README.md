@@ -71,6 +71,7 @@ extensions:
     enabled: true         # toggle comments globally (default: true)
     show_author: true     # show author labels (default: true)
     show_list: true       # prepend a styled list of all comments in PDF (default: false)
+    connector: numbered   # in-text marker style: numbered (default) | bezier
     wide_margins: true    # extend page width for a dedicated annotation zone (default: false)
     # extra_margin: "6.5cm" # width added to the page (default: 6.5cm)
     # twocolumn_marginparwidth: "auto" # margin-note width in twocolumn, non-wide (default: "auto")
@@ -143,15 +144,16 @@ Setting `enabled: false` restores the original page layout for final output — 
 - Icons use [Font Awesome 6](https://fontawesome.com/), injected automatically — no manual `include-in-header` needed.
 - Inline comments (`inline=true`) render as compact badges that sit within text runs.
 - **Mid-sentence comments**: a non-inline comment written in the middle of a sentence is moved into the margin (as a sidenote) without breaking the paragraph, provided the bundled filter is enabled with `filters: [comments]` (see [Installation](#installation)). Without the filter it degrades gracefully to an inline badge. This is handled by `comment-hoist.lua`, which the extension registers to run after shortcode expansion; it only affects HTML (PDF places mid-sentence comments in the margin natively).
+- **In-text anchors**: every margin comment leaves a small clickable icon (in the author colour) at its position in the text, linked to its margin callout. Hovering either the icon or the callout highlights the other.
 
 ### PDF / LaTeX
 
 - Comments render via the [`todonotes`](https://ctan.org/pkg/todonotes) package; inline comments use `\todo[inline]{...}`.
 - Required LaTeX packages (`xcolor`, `todonotes`, `fontawesome5`) are injected automatically — no manual `include-in-header` needed.
 - Icons use [Font Awesome 5](https://ctan.org/pkg/fontawesome5) in outline (regular) style, compatible with pdflatex, xelatex, and lualatex.
-- Author colours are applied to the note background, border, and connecting line.
-- The connection between a comment anchor and its margin note is a smooth Bézier curve with a hollow circle at the text position.
-- **List of comments**: set `show_list: true` to prepend a styled, clickable list of all margin comments (rounded dashed frame). Inline comments are excluded.
+- Author colours are applied to the note background, border, and the in-text marker.
+- **Connector style** (`connector`, default `numbered`): each margin comment shows a small clickable icon + number at its text position, linked to its note box, which repeats the same icon + number; comments are numbered in document order and the list of comments shows the same numbers. This needs no connecting line, so it is robust in one/two-sided, two-column, narrow-margin and page-break layouts. Set `connector: bezier` for the legacy smooth Bézier curve with a hollow circle at the text position instead.
+- **List of comments**: set `show_list: true` to prepend a styled, clickable list of all comments (rounded dashed frame), numbered to match the in-text markers.
 - **Draft layout**: set `wide_margins: true` to extend the page and give notes a dedicated, clearly delimited zone — see [Draft layout (PDF)](#draft-layout-pdf).
 
 #### Two-column PDF
@@ -160,7 +162,7 @@ Two-column layouts (`classoption: twocolumn`) are supported and auto-detected �
 
 - **Without `wide_margins`**: the margin-note width is set automatically from the page geometry (the class default is far too narrow in two columns, which otherwise crushes the note text). Override it with `twocolumn_marginparwidth` (default `"auto"`).
 - **With `wide_margins: true`**: the page is widened on both sides and a grey annotation zone is reserved at each edge, so no comment is pushed off the page.
-- Bézier connectors point to the correct side per column in both cases.
+- The in-text markers link correctly per column; in `connector: bezier` mode the curves also point to the correct side per column.
 
 Single-column behaviour (one-sided and two-sided) is unchanged.
 
@@ -168,9 +170,12 @@ Single-column behaviour (one-sided and two-sided) is unchanged.
 > by LaTeX's `\marginpar`, which floats a note to the next page when it does not
 > fit and decides its side from the page being assembled. A note anchored right
 > at a page break (e.g. just after a heading at the top of a page) can therefore
-> be pushed onto a neighbour or land in the opposite margin, and its Bézier
-> connector then points at that displaced box. Giving notes more room avoids it
-> — use `wide_margins: true`, or space out comments that fall near a page break.
+> be pushed onto a neighbour or land in the opposite margin. In the default
+> numbered mode the in-text marker and its link stay correct (the number still
+> identifies the note and the link still jumps to it) — only the box's placement
+> is affected; in `connector: bezier` mode the curve then points at the displaced
+> box. Giving notes more room avoids it — use `wide_margins: true`, or space out
+> comments that fall near a page break.
 
 ### Other Formats
 

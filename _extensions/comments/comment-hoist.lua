@@ -62,7 +62,13 @@ local function process_inlines(inlines, divs)
     local node = inlines[i]
     if is_marker(node) then
       table.insert(divs, utils.build_hoisted_div(node))
-      if #out > 0 and out[#out].t == "Space" and starts_with_tight_punct(inlines[i + 1]) then
+      -- Leave a small clickable icon anchor in the text (linked to the hoisted
+      -- callout). If there is no number to link to, fall back to the old
+      -- behaviour: drop the marker and the space stranded before tight punct.
+      local anchor = utils.build_anchor_from_span(node)
+      if anchor then
+        table.insert(out, anchor)
+      elseif #out > 0 and out[#out].t == "Space" and starts_with_tight_punct(inlines[i + 1]) then
         table.remove(out)
       end
     else

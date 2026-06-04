@@ -10,6 +10,7 @@ extensions:
     enabled: true
     show_author: true
     show_list: true
+    # connector: numbered     # in-text marker: numbered (default, clickable) | bezier (legacy line)
     wide_margins: true
     # extra_margin: "6.5cm"   # width added to the page for the annotation zone (default: 6.5cm)
     # inner_pad: "0.3cm"      # padding inside the annotation zone on each side (default: 0.3cm)
@@ -24,10 +25,8 @@ extensions:
 ---
 
 This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs.
-Comments are inserted with shortcodes and render as margin callouts (HTML) or `todonotes` margin notes (PDF).
+Comments are inserted with shortcodes {{< comment "Consider adding a motivating example in the introduction." author="vg" >}} and render as margin callouts (HTML) or `todonotes` margin notes (PDF).
 Set `enabled: false` in the configuration to strip all annotations for final submission.
-
-{{< comment "Consider adding a motivating example in the introduction." author="vg" >}}
 
 ## Introduction
 
