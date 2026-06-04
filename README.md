@@ -73,6 +73,7 @@ extensions:
     show_list: true       # prepend a styled list of all comments in PDF (default: false)
     wide_margins: true    # extend page width for a dedicated annotation zone (default: false)
     # extra_margin: "6.5cm" # width added to the page (default: 6.5cm)
+    # twocolumn_marginparwidth: "auto" # margin-note width in twocolumn, non-wide (default: "auto")
     authors:
       vg:
         name: "Vincent"
@@ -130,7 +131,7 @@ This works whether or not the document loads the [`geometry`](https://ctan.org/p
 
 **Two-sided documents** (`classoption: twoside`): the zone alternates sides — right on odd (recto) pages, left on even (verso) pages — so it always sits at the outer edge, away from the binding.
 
-`wide_margins` assumes a single-column layout (see the PDF limitation below).
+**Two-column documents** (`classoption: twocolumn`): the page is widened on **both** sides and an annotation zone is reserved at each edge, so first-column comments land in the left zone and second-column comments in the right zone (see [Two-column PDF](#two-column-pdf)).
 
 Setting `enabled: false` restores the original page layout for final output — no trace of the annotation zone remains.
 
@@ -153,12 +154,23 @@ Setting `enabled: false` restores the original page layout for final output — 
 - **List of comments**: set `show_list: true` to prepend a styled, clickable list of all margin comments (rounded dashed frame). Inline comments are excluded.
 - **Draft layout**: set `wide_margins: true` to extend the page and give notes a dedicated, clearly delimited zone — see [Draft layout (PDF)](#draft-layout-pdf).
 
-> **Limitation — single-column only:** PDF margin comments (built on `todonotes`)
-> support **single-column** documents only. In a two-column layout
-> (`classoption: twocolumn`) notes and their connectors are misplaced — left-column
-> comments are pushed off the page and Bézier lines point nowhere — **with or
-> without** `wide_margins`. Two-column PDF output is not currently supported.
-> (HTML margin callouts are unaffected.)
+#### Two-column PDF
+
+Two-column layouts (`classoption: twocolumn`) are supported and auto-detected — no extra configuration is required. The kernel places first-column notes in the left page margin and second-column notes in the right, and the extension adapts to that:
+
+- **Without `wide_margins`**: the margin-note width is set automatically from the page geometry (the class default is far too narrow in two columns, which otherwise crushes the note text). Override it with `twocolumn_marginparwidth` (default `"auto"`).
+- **With `wide_margins: true`**: the page is widened on both sides and a grey annotation zone is reserved at each edge, so no comment is pushed off the page.
+- Bézier connectors point to the correct side per column in both cases.
+
+Single-column behaviour (one-sided and two-sided) is unchanged.
+
+> **Known limitation — crowded margins / page breaks:** margin notes are placed
+> by LaTeX's `\marginpar`, which floats a note to the next page when it does not
+> fit and decides its side from the page being assembled. A note anchored right
+> at a page break (e.g. just after a heading at the top of a page) can therefore
+> be pushed onto a neighbour or land in the opposite margin, and its Bézier
+> connector then points at that displaced box. Giving notes more room avoids it
+> — use `wide_margins: true`, or space out comments that fall near a page break.
 
 ### Other Formats
 
