@@ -8,8 +8,6 @@ if not ok_quarto then
 end
 
 local FA_CSS_LINK = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />'
-local _fa_css_injected = false
-local _html_hover_injected = false
 
 -- Styling for the numbered-mode HTML feature only (the in-text anchor and the
 -- hover/:target highlight). Injected as a <style> because an extension's
@@ -510,6 +508,15 @@ local function get_config(meta)
     authors = {},
   }
 
+  -- RENAME / NAMESPACE checklist (when this leaves the `quarto-comments` namespace,
+  -- e.g. -> quarto-proofread): the surfaces below are name-bound.
+  --   * THIS meta key `extensions["quarto-comments"]` — user-facing config, MUST change
+  --     (mirror the key in example.qmd / docs).
+  --   * HTML classes `quarto-comment*` (build_html_*, ANCHOR_CSS, HTML_HOVER_SCRIPT) —
+  --     user-facing CSS surface, change OK.
+  --   * LaTeX prefix `qtc` / `\qtc@…` and auto colours `cmt-…` — internal, KEEP as-is.
+  --   * Extension dir `_extensions/comments/` + filter filename — move with the dir.
+  -- The transient `qtc-marker` span (shortcode→filter) never reaches output.
   local config_meta = meta and meta.extensions and meta.extensions["quarto-comments"]
   if not config_meta then
     return config
@@ -1042,7 +1049,10 @@ local function build_latex(comment_type, comment_text, author, inline, config, n
     -- Bezier mode: plain todonotes note, no number; the line/circle is drawn by
     -- BEZIER_CONNECTION_LATEX.
     local content = icon_box .. " " .. author_colored .. body
-    return pandoc.RawBlock("tex", "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
+    -- RawInline (not RawBlock): the filter places every comment at an inline
+    -- position, and todonotes handles a mid-paragraph \todo natively, so the host
+    -- paragraph is no longer split. Works equally for a comment alone on its line.
+    return pandoc.RawInline("tex", "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
   end
 
   -- Numbered mode. Caption (plain, robust) feeds the .tdo / list-of-todos with
@@ -1056,7 +1066,10 @@ local function build_latex(comment_type, comment_text, author, inline, config, n
     .. icon_box .. "\\," .. num .. "\\\\" .. author_colored .. body
   local setup = "\\def\\qtccol{" .. base_color .. "}\\def\\qtcico{" .. fa_cmd
     .. "}\\stepcounter{qtccomment}%\n"
-  return pandoc.RawBlock("tex", setup .. "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
+  -- RawInline (not RawBlock): inline placement by the filter; \def/\stepcounter
+  -- do not typeset, and todonotes handles the mid-paragraph \todo natively, so the
+  -- host paragraph is never split (and a comment alone on its line still works).
+  return pandoc.RawInline("tex", setup .. "\\todo[" .. table.concat(options, ",") .. "]{" .. content .. "}")
 end
 
 -- Build the LaTeX preamble snippet that gives todonotes a usable marginpar
@@ -1304,8 +1317,12 @@ function utils.render(args, kwargs, meta, forced_type, context)
   local comment_text = extract_text(args, kwargs)
   comment_text = trim(comment_text or "")
 
+  -- Return nil (not pandoc.Null()) for "render nothing": render() is now called
+  -- only from the filter, which treats nil as "drop". A pandoc.Null() block does
+  -- not reliably classify as empty outside the shortcode runtime, which would make
+  -- the filter inject its HTML assets for a document with no visible comments.
   if comment_text == "" then
-    return pandoc.Null()
+    return nil
   end
 
   local comment_type = forced_type or kwargs.type or "comment"
@@ -1321,9 +1338,9 @@ function utils.render(args, kwargs, meta, forced_type, context)
   -- Get configuration from meta
   local config = get_config(meta)
 
-  -- If comments are disabled, return nothing
+  -- If comments are disabled, return nothing (nil = drop; see note above).
   if not config.enabled then
-    return pandoc.Null()
+    return nil
   end
 
   -- Resolve author
@@ -1351,42 +1368,25 @@ function utils.render(args, kwargs, meta, forced_type, context)
   _qtc_number = _qtc_number + 1
   local number = _qtc_number
 
-  -- Render based on format
+  -- Render based on format. NB: HTML assets (Font Awesome, ANCHOR_CSS,
+  -- HTML_HOVER_SCRIPT) are NOT injected here — the unified filter (comments.lua)
+  -- injects them once, deterministically, after the document walk. render() only
+  -- builds nodes; only the LaTeX preamble (per-comment, config-dependent) is still
+  -- injected below, which works because render() now runs from the post-quarto
+  -- filter.
   if is_html_format() then
-    if not _html_hover_injected then
-      _html_hover_injected = true
-      pcall(function()
-        quarto.doc.include_text("in-header", ANCHOR_CSS)
-        quarto.doc.include_text("after-body", HTML_HOVER_SCRIPT)
-      end)
-    end
     local html_color = resolve_html_color(comment_type, author)
     if inline then
-      local result = build_html_inline(comment_type, comment_text, author, html_color, config, number)
-      if not _fa_css_injected then
-        _fa_css_injected = true
-        result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
-      end
-      return result
+      return build_html_inline(comment_type, comment_text, author, html_color, config, number)
     elseif context == "inline" then
       -- Non-inline comment placed mid-sentence: emit an inline placeholder badge
-      -- carrying hoist data. comment-hoist.lua (when active) replaces it with a
-      -- sibling margin callout; otherwise it degrades to a visible inline badge.
-      local result = build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
-      if not _fa_css_injected then
-        _fa_css_injected = true
-        result.content:insert(1, pandoc.RawInline("html", FA_CSS_LINK))
-      end
-      return result
+      -- carrying hoist data. The filter replaces it with a sibling margin callout
+      -- (hoist); without the filter it degrades to a visible inline badge.
+      return build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
     else
       -- Non-inline comment on its own line (block context): margin callout Div
       -- plus an in-text icon anchor in the main column.
-      local result = build_html_block(comment_type, comment_text, author, html_color, config, number, true)
-      if not _fa_css_injected then
-        _fa_css_injected = true
-        result.content:insert(1, pandoc.RawBlock("html", FA_CSS_LINK))
-      end
-      return result
+      return build_html_block(comment_type, comment_text, author, html_color, config, number, true)
     end
   end
 
@@ -1495,5 +1495,12 @@ function utils.render(args, kwargs, meta, forced_type, context)
     return pandoc.Div({ pandoc.Para(inline_content) })
   end
 end
+
+-- Exposed for the unified filter (comments.lua), the single injector of the
+-- document-level HTML assets (one Font Awesome <link>, one ANCHOR_CSS <style>,
+-- one HTML_HOVER_SCRIPT <script>).
+utils.FA_CSS_LINK = FA_CSS_LINK
+utils.ANCHOR_CSS = ANCHOR_CSS
+utils.HTML_HOVER_SCRIPT = HTML_HOVER_SCRIPT
 
 return utils

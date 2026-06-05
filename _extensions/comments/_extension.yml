@@ -8,7 +8,8 @@ contributes:
   shortcodes:
     - shortcodes.lua
   filters:
-    # post-quarto so the filter sees expanded shortcodes (placeholders are
-    # produced during shortcode expansion, which runs after pre-quarto filters).
+    # post-quarto so the filter sees expanded shortcodes: shortcodes.lua emits
+    # transient .qtc-marker spans during expansion (after pre-quarto filters), and
+    # this unified filter does all rendering + preamble/asset injection.
     - at: post-quarto
-      path: comment-hoist.lua
+      path: comments.lua
