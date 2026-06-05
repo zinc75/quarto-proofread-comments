@@ -318,6 +318,15 @@ local INLINE_FLOW_LATEX = [[
 \usepackage{soul}
 \usepackage{soulpos}
 \usepackage{tcolorbox}
+% soulpos schedules the generation of its .upb position file by writing a token
+% (\ulp@afterend) to the .aux with a DEFERRED \write, executed on the final .aux
+% re-read. mparhack rewrites the output routine and swallows that deferred write
+% on the last page, so .upb is never produced and the flowing badge boxes vanish
+% (the .upa data is fine — these are \immediate writes). Re-schedule the token with
+% an IMMEDIATE \write, which mparhack cannot drop, but only when mparhack is loaded
+% (otherwise soulpos' own mechanism already works, and we avoid generating .upb
+% twice). At \AtEndDocument time the package is loaded-or-not for sure.
+\AtEndDocument{\@ifpackageloaded{mparhack}{\immediate\write\@auxout{\string\ulp@afterend}}{}}%
 \colorlet{qtcul}{gray}
 \newtcbox{\qtc@inlinebox}[1][]{%
   on line, arc=1pt, outer arc=2pt,
@@ -501,6 +510,7 @@ local function get_config(meta)
     connector = "numbered",
     inline_style = "flow",
     wide_margins = false,
+    marginpar_fix = true,
     twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
     inner_pad = "0.3cm",
@@ -548,6 +558,10 @@ local function get_config(meta)
   if config_meta.wide_margins ~= nil then
     local wm = meta_to_bool(config_meta.wide_margins)
     if wm ~= nil then config.wide_margins = wm end
+  end
+  if config_meta.marginpar_fix ~= nil then
+    local mf = meta_to_bool(config_meta.marginpar_fix)
+    if mf ~= nil then config.marginpar_fix = mf end
   end
   if config_meta.connector then
     local c = meta_to_string(config_meta.connector):lower()
@@ -1406,7 +1420,13 @@ function utils.render(args, kwargs, meta, forced_type, context)
       -- reproducible only via Quarto, not a clean manual compile), and twocolumn
       -- margin/side handling differs anyway. \if@twocolumn is already set by
       -- \documentclass when this in-header line runs; guarded against a double load.
-      if not _latex_mparhack_injected then
+      --
+      -- mparhack rewrites the output routine, which can clash with other packages
+      -- in an arbitrary host template (e.g. it drops a deferred \write that soulpos
+      -- needs for its flowing inline badges — see the \ulp@afterend rescue in
+      -- INLINE_FLOW_LATEX). It is therefore opt-OUT via `marginpar_fix: false` for
+      -- documents where it causes trouble (best-effort: we cannot test every class).
+      if config.marginpar_fix and not _latex_mparhack_injected then
         _latex_mparhack_injected = true
         quarto.doc.include_text("in-header",
           "\\makeatletter\\@ifpackageloaded{mparhack}{}{\\if@twocolumn\\else"
