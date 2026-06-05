@@ -38,6 +38,20 @@ local ANCHOR_CSS = [[
   transform: scale(1.4);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
+/* A highlight (span of text with an attached note) IS its own anchor; hovering it
+   (or its callout) draws a ring in the author colour. No scale — it wraps real
+   text, which must not jump. */
+.quarto-comment-highlight {
+  cursor: pointer;
+  transition: box-shadow 0.12s ease-in-out;
+}
+/* Hover/link a highlight: intensify the marker itself (a uniform inset tint of the
+   author colour fills it) rather than drawing a box around it, which looks wrong on
+   highlighted text. box-decoration-break clones it across line fragments. */
+.quarto-comment-highlight:hover,
+.quarto-comment-highlight.quarto-comment-hl {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--comment-color, #6c757d) 22%, transparent);
+}
 .quarto-comment-block.callout {
   transition: transform 0.12s ease-in-out, box-shadow 0.12s ease-in-out;
 }
@@ -57,7 +71,7 @@ local HTML_HOVER_SCRIPT = [[
 <script>
 (function () {
   function wire() {
-    document.querySelectorAll('a.quarto-comment-anchor').forEach(function (a) {
+    document.querySelectorAll('a.quarto-comment-anchor, a.quarto-comment-highlight').forEach(function (a) {
       var href = a.getAttribute('href') || '';
       if (href.charAt(0) !== '#') return;
       var target = document.getElementById(href.slice(1));
@@ -82,6 +96,7 @@ local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
 local _latex_numbered_injected = false
 local _latex_inline_flow_injected = false
+local _latex_highlight_injected = false
 local _latex_twocol_mpwidth_injected = false
 local _latex_mparhack_injected = false
 
@@ -347,6 +362,33 @@ local INLINE_FLOW_LATEX = [[
     {\tcbset{qtcULside/.append style={rightrule=0.6pt,right=-0.5pt}}}%
     {\tcbset{qtcULside/.append style={rightrule=0pt,sharp corners=east,right=-2pt}}}%
   \qtc@inlinebox[qtcULside]{\vphantom{Ap}\rule{\ulwidth}{0pt}}%
+}%
+\fi
+\makeatother
+]]
+
+-- Marker-pen highlight for a highlighted span of text (the non-empty .comment span)
+-- in PDF. Uses the `highlightx` package (built on soul + tikz): \HighlightText flows
+-- and breaks across lines like a real highlighter. We override its shape macro with
+-- a slightly slanted parallelogram and give the edge an irregular "random steps"
+-- decoration (amplitude 0.85pt / segment 1.1em — the chosen look) so it reads as a
+-- hand-drawn marker. highlightx loads soul itself; it coexists with soulpos (the
+-- inline-flow badge) — both just reuse soul, scoped per call. Guarded once.
+local HIGHLIGHT_LATEX = [[
+\makeatletter
+\ifx\qtc@highlight@done\undefined
+\gdef\qtc@highlight@done{}%
+\usepackage{highlightx}
+\usetikzlibrary{calc,decorations.pathmorphing}
+\tikzset{borderformula/.style={decorate,decoration={random steps,amplitude=0.85pt,segment length=1.1em}}}
+\renewcommand{\highlight@DoHighlight}{%
+  \pgfmathsetlengthmacro{\HLslant}{(1+4*rnd)*1pt}%
+  \pgfmathsetlengthmacro{\HLextra}{(0.9*rnd)*1pt}%
+  \fill[hlparhw]
+    ($(begin highlight)+(-\surlignparoffsetH+\HLslant,1.05*\tmp@hauteur@char+\surlignparoffsetV)$) --
+    ($(end highlight)+(\surlignparoffsetH+\HLslant+\HLextra,1.05*\tmp@hauteur@char+\surlignparoffsetV)$) --
+    ($(end highlight)+(\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) --
+    ($(begin highlight)+(-\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) -- cycle;%
 }%
 \fi
 \makeatother
@@ -1332,6 +1374,115 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
   return geom .. "\n" .. frame
 end
 
+-- Inject the LaTeX preamble this document needs (packages + the connector/list/
+-- wide-margin machinery), once each via module guards. Shared by render() (inserted
+-- comments) and render_highlight(). `needs_soul` forces the soul/soulpos block (the
+-- flowing inline badge AND the \hl highlight need soul).
+local function inject_latex(config, needs_soul)
+  pcall(function()
+    quarto.doc.use_latex_package("xcolor")
+    quarto.doc.use_latex_package("todonotes")
+    quarto.doc.use_latex_package("fontawesome5")
+    -- mparhack fixes the classic \marginpar side bug: a note anchored near a page
+    -- (or column) break can be placed on the wrong margin (then clipped by our wide
+    -- zone), which made a comment at the END of a twoside document vanish, and in
+    -- twocolumn dropped notes onto the text. mparhack records each marginpar's true
+    -- side in the .aux and replays it next run. Loaded in BOTH one- and two-column:
+    -- the twocolumn clash it used to cause ("Illegal unit of measure" under Quarto's
+    -- rerun loop) was its \hb@xt@ redefinition breaking the \resizebox in our shipout
+    -- marker — now isolated at the source (\mph@orig@hb@xt@ in NUMBERED_MARKER_LATEX).
+    -- mparhack rewrites the output routine and can clash with an arbitrary host
+    -- template (e.g. it drops a deferred \write soulpos needs — see the \ulp@afterend
+    -- rescue in INLINE_FLOW_LATEX), so it is opt-OUT via `marginpar_fix: false`.
+    if config.marginpar_fix and not _latex_mparhack_injected then
+      _latex_mparhack_injected = true
+      quarto.doc.include_text("in-header",
+        "\\makeatletter\\@ifpackageloaded{mparhack}{}{"
+        .. "\\RequirePackage{mparhack}}\\makeatother")
+    end
+    if not _latex_stale_cleared then
+      _latex_stale_cleared = true
+      -- Remove this extension's stale auxiliary files from a previous render
+      -- (cross-platform; once per render, before LaTeX runs): *.tdo (list of todos)
+      -- and *.upa/*.upb (soulpos positions). They are recreated for THIS document
+      -- by the LaTeX passes; this only sweeps leftovers (notably from a previous
+      -- FAILED render, which Quarto does not clean) so the directory stops piling up.
+      if pandoc.system then
+        local ok, files = pcall(pandoc.system.list_directory, ".")
+        if ok and files then
+          for _, f in ipairs(files) do
+            if f:match("%.tdo$") or f:match("%.upa$") or f:match("%.upb$") then
+              os.remove(f)
+            end
+          end
+        end
+      end
+    end
+    if config.show_list and not _listoftodos_injected then
+      _listoftodos_injected = true
+      local fc = config.frame_color
+      local fl = config.frame_line
+      quarto.doc.use_latex_package("tcolorbox")
+      quarto.doc.include_text("in-header", "\\tcbuselibrary{skins,breakable}\n")
+      -- Wrap \listoftodos in a styled tcolorbox (grey bg, dashed rounded border).
+      -- The section title is output OUTSIDE the box; only the list content
+      -- (\@starttoc{tdo}) is wrapped. Guarded against multiple injections.
+      quarto.doc.include_text("before-body",
+        "\\makeatletter\\ifx\\@qtc@listoftodos@done\\undefined" ..
+        "\\gdef\\@qtc@listoftodos@done{}" ..
+        "\\@ifundefined{chapter}" ..
+        "{\\section*{\\@todonotes@todolistname}}" ..
+        "{\\chapter*{\\@todonotes@todolistname}}" ..
+        "\\begin{tcolorbox}[enhanced," ..
+        "colback={" .. fc .. "}," ..
+        "colframe=white," ..
+        "arc=5pt," ..
+        "borderline={0.5pt}{0pt}{{" .. fl .. "},dashed}," ..
+        "left=8pt,right=8pt,top=6pt,bottom=6pt," ..
+        "breakable]" ..
+        "\\@starttoc{tdo}" ..
+        "\\end{tcolorbox}" ..
+        "\\fi\\makeatother\n")
+    end
+    if config.connector == "bezier" then
+      if not _latex_bezier_injected then
+        _latex_bezier_injected = true
+        quarto.doc.include_text("in-header", BEZIER_CONNECTION_LATEX)
+      end
+    else
+      -- Numbered mode: the clickable icon+number marker, drawn in the shipout
+      -- foreground and linked to the box via hyperref.
+      if not _latex_numbered_injected then
+        _latex_numbered_injected = true
+        quarto.doc.use_latex_package("hyperref")
+        quarto.doc.include_text("in-header", NUMBERED_MARKER_LATEX)
+      end
+    end
+    -- soul/soulpos/tcolorbox + \qtcinline: needed by the flowing inline badge and by
+    -- the \hl highlight (both go through soul).
+    if needs_soul and not _latex_inline_flow_injected then
+      _latex_inline_flow_injected = true
+      quarto.doc.include_text("in-header", INLINE_FLOW_LATEX)
+    end
+    if config.wide_margins and not _latex_wide_margins_injected then
+      _latex_wide_margins_injected = true
+      quarto.doc.include_text("in-header",
+        build_wide_margins_header(
+          config.extra_margin,
+          config.inner_pad,
+          config.frame_color,
+          config.frame_line))
+    end
+    -- Non-wide path: give todonotes a usable marginpar width in twocolumn (the wide
+    -- path sets \marginparwidth itself, so this is mutually exclusive).
+    if not config.wide_margins and not _latex_twocol_mpwidth_injected then
+      _latex_twocol_mpwidth_injected = true
+      quarto.doc.include_text("in-header",
+        build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
+    end
+  end)
+end
+
 function utils.render(args, kwargs, meta, forced_type, context)
   kwargs = kwargs or {}
   local comment_text = extract_text(args, kwargs)
@@ -1411,123 +1562,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
   end
 
   if is_latex_format() then
-    pcall(function()
-      quarto.doc.use_latex_package("xcolor")
-      quarto.doc.use_latex_package("todonotes")
-      quarto.doc.use_latex_package("fontawesome5")
-      -- mparhack fixes the classic \marginpar side bug: a note anchored near a page
-      -- (or column) break can be placed on the wrong margin (then clipped by our
-      -- wide zone), which made a comment at the END of a twoside document vanish,
-      -- and in twocolumn dropped notes onto the text. mparhack records each
-      -- marginpar's true side in the .aux and replays it on the next run. Loaded in
-      -- BOTH one- and two-column: the twocolumn clash it used to cause ("Illegal
-      -- unit of measure" under Quarto's rerun loop) was its redefinition of
-      -- \hb@xt@ breaking the \resizebox in our shipout marker — now isolated at the
-      -- source (see \mph@orig@hb@xt@ in NUMBERED_MARKER_LATEX). Guarded vs a double
-      -- load.
-      --
-      -- mparhack rewrites the output routine, which can clash with other packages
-      -- in an arbitrary host template (e.g. it drops a deferred \write that soulpos
-      -- needs for its flowing inline badges — see the \ulp@afterend rescue in
-      -- INLINE_FLOW_LATEX). It is therefore opt-OUT via `marginpar_fix: false` for
-      -- documents where it causes trouble (best-effort: we cannot test every class).
-      if config.marginpar_fix and not _latex_mparhack_injected then
-        _latex_mparhack_injected = true
-        quarto.doc.include_text("in-header",
-          "\\makeatletter\\@ifpackageloaded{mparhack}{}{"
-          .. "\\RequirePackage{mparhack}}\\makeatother")
-      end
-      if not _latex_stale_cleared then
-        _latex_stale_cleared = true
-        -- Remove this extension's stale auxiliary files left in the source
-        -- directory by a previous render (cross-platform; shell globbing is not
-        -- portable). Done once per render, before LaTeX runs, so the current
-        -- render regenerates them cleanly across its passes:
-        --   *.tdo          — list-of-todos table of contents
-        --   *.upa / *.upb  — soulpos position files for the flowing inline badges
-        -- (NB the files for THIS document are recreated during the LaTeX passes
-        -- that follow; this only sweeps leftovers — notably from a previous FAILED
-        -- render, which Quarto does not clean — so the directory stops
-        -- accumulating soulpos/todo aux files render after render.)
-        if pandoc.system then
-          local ok, files = pcall(pandoc.system.list_directory, ".")
-          if ok and files then
-            for _, f in ipairs(files) do
-              if f:match("%.tdo$") or f:match("%.upa$") or f:match("%.upb$") then
-                os.remove(f)
-              end
-            end
-          end
-        end
-      end
-      if config.show_list and not _listoftodos_injected then
-        _listoftodos_injected = true
-        local fc = config.frame_color
-        local fl = config.frame_line
-        quarto.doc.use_latex_package("tcolorbox")
-        quarto.doc.include_text("in-header", "\\tcbuselibrary{skins,breakable}\n")
-        -- Wrap \listoftodos in a styled tcolorbox: grey background, dashed
-        -- border with rounded corners. Guard against multiple injections.
-        -- Output the section title outside the box, then wrap only the list
-        -- content (\@starttoc{tdo}) in the tcolorbox so the title is not
-        -- enclosed in the grey frame.
-        quarto.doc.include_text("before-body",
-          "\\makeatletter\\ifx\\@qtc@listoftodos@done\\undefined" ..
-          "\\gdef\\@qtc@listoftodos@done{}" ..
-          "\\@ifundefined{chapter}" ..
-          "{\\section*{\\@todonotes@todolistname}}" ..
-          "{\\chapter*{\\@todonotes@todolistname}}" ..
-          "\\begin{tcolorbox}[enhanced," ..
-          "colback={" .. fc .. "}," ..
-          "colframe=white," ..
-          "arc=5pt," ..
-          "borderline={0.5pt}{0pt}{{" .. fl .. "},dashed}," ..
-          "left=8pt,right=8pt,top=6pt,bottom=6pt," ..
-          "breakable]" ..
-          "\\@starttoc{tdo}" ..
-          "\\end{tcolorbox}" ..
-          "\\fi\\makeatother\n")
-      end
-      if config.connector == "bezier" then
-        if not _latex_bezier_injected then
-          _latex_bezier_injected = true
-          quarto.doc.include_text("in-header", BEZIER_CONNECTION_LATEX)
-        end
-      else
-        -- Numbered mode: draw the clickable icon+number marker in the shipout
-        -- foreground and link it to the box via hyperref (Quarto loads hyperref;
-        -- the \providecommand guards inside the snippet keep the marker rendering
-        -- if it somehow is not present).
-        if not _latex_numbered_injected then
-          _latex_numbered_injected = true
-          quarto.doc.use_latex_package("hyperref")
-          quarto.doc.include_text("in-header", NUMBERED_MARKER_LATEX)
-        end
-      end
-      -- Inline flow mode needs soul/soulpos/tcolorbox + the \qtcinline badge.
-      -- Inject only when an inline comment actually uses it (independent of the
-      -- connector mode, which is about margin comments).
-      if inline and config.inline_style ~= "box" and not _latex_inline_flow_injected then
-        _latex_inline_flow_injected = true
-        quarto.doc.include_text("in-header", INLINE_FLOW_LATEX)
-      end
-      if config.wide_margins and not _latex_wide_margins_injected then
-        _latex_wide_margins_injected = true
-        quarto.doc.include_text("in-header",
-          build_wide_margins_header(
-            config.extra_margin,
-            config.inner_pad,
-            config.frame_color,
-            config.frame_line))
-      end
-      -- Non-wide path: give todonotes a usable marginpar width in twocolumn.
-      -- The wide path sets \marginparwidth itself, so this is mutually exclusive.
-      if not config.wide_margins and not _latex_twocol_mpwidth_injected then
-        _latex_twocol_mpwidth_injected = true
-        quarto.doc.include_text("in-header",
-          build_twocolumn_marginparwidth_header(config.twocolumn_marginparwidth))
-      end
-    end)
+    inject_latex(config, inline and config.inline_style ~= "box")
     return build_latex(comment_type, comment_text, author, inline, config, number)
   end
 
@@ -1547,6 +1582,101 @@ function utils.render(args, kwargs, meta, forced_type, context)
   else
     return pandoc.Div({ pandoc.Para(inline_content) })
   end
+end
+
+-- Highlight an existing span of text and attach a margin note to it. `content` is
+-- the list of inlines to highlight; `attrs` is the comment span's attribute table
+-- (note / type / author). Returns { inlines = <left in the text flow>, blocks =
+-- <sibling blocks> }. The highlight itself is the clickable anchor (no separate
+-- in-text icon), reusing the numbered/hover/link machinery of inserted comments.
+function utils.render_highlight(content, attrs, meta)
+  attrs = attrs or {}
+  local note_text = trim(meta_to_string(attrs.note) or "")
+  local comment_type = (attrs.type and attrs.type ~= "" and tostring(attrs.type):lower()) or "comment"
+  if not VALID_TYPES[comment_type] then comment_type = "comment" end
+  local author_id = attrs.author and meta_to_string(attrs.author):gsub("[^%w%-_]", "") or nil
+  if author_id == "" then author_id = nil end
+
+  local config = get_config(meta)
+  if not config.enabled then
+    -- Disabled: leave the highlighted text bare, drop the note.
+    return { inlines = content, blocks = {} }
+  end
+
+  local author = nil
+  if author_id then
+    local a = config.authors[author_id]
+    if a then
+      author = { id = author_id, name = a.name or author_id,
+                 color_html = a.color_html, color_latex = a.color_latex }
+    else
+      author = { id = author_id, name = author_id }
+    end
+  end
+
+  _qtc_number = _qtc_number + 1
+  local number = _qtc_number
+
+  if is_html_format() then
+    local html_color = resolve_html_color(comment_type, author)
+    -- The highlight IS the anchor: a link wrapping the content, with a coloured
+    -- background that flows/breaks across lines (box-decoration-break:clone),
+    -- linked to its margin callout (#qtc-<n>) and hover-paired with it.
+    -- A marker-pen highlight: an irregular multi-stop gradient (denser near the two
+    -- ends, lighter in the middle) tinted with the author colour, rather than a flat
+    -- fill. box-decoration-break:clone repeats it per line fragment so it flows and
+    -- breaks like a real highlighter. No text-shadow (kept subtle, text stays clean).
+    local function mix(pct) return "color-mix(in srgb, " .. html_color .. " " .. pct .. "%, transparent)" end
+    local bg = "linear-gradient(104deg, " ..
+      mix(0) .. " 0.9%, " .. mix(50) .. " 2.4%, " .. mix(24) .. " 5.8%, " ..
+      mix(10) .. " 93%, " .. mix(38) .. " 96%, " .. mix(0) .. " 98%)"
+    local style = table.concat({
+      "--comment-color: " .. html_color,
+      "background: " .. bg,
+      "border-radius: 0.4rem",
+      "padding: 0.05em 0.2em",
+      "-webkit-box-decoration-break: clone",
+      "box-decoration-break: clone",
+      "text-decoration: none",
+      "color: inherit",
+    }, "; ") .. ";"
+    local hl = pandoc.Link(content, "#qtc-" .. number, "",
+      pandoc.Attr("", { "quarto-comment-highlight", "comment-" .. comment_type },
+        { style = style, ["data-comment-type"] = comment_type }))
+    -- Margin callout carrying the note; with_anchor=false because the highlight is
+    -- already the anchor (no separate in-text icon).
+    local margin = build_html_block(comment_type, note_text, author, html_color, config, number, false)
+    return { inlines = { hl }, blocks = { margin } }
+  end
+
+  if is_latex_format() then
+    inject_latex(config, false) -- todonotes/connector/mparhack for the margin note
+    if not _latex_highlight_injected then
+      _latex_highlight_injected = true
+      pcall(function() quarto.doc.include_text("in-header", HIGHLIGHT_LATEX) end)
+    end
+    local latex_color = resolve_latex_color(comment_type, author)
+    local base = latex_color:match("^([^!]+)") or latex_color
+    -- highlightx marker-pen highlight: bg = the author colour (its default 0.25
+    -- opacity gives a light tint). It flows/breaks across lines. The content goes
+    -- through soul (plain text, math and \emph/\textbf are fine; \textcolor is
+    -- soul-hostile — a documented limit for highlighted text). The margin note
+    -- follows as a \todo, exactly like an inserted margin comment, so it gets the
+    -- same marker / number / list entry.
+    local inlines = { pandoc.RawInline("tex", "\\HighlightText[bg=" .. base .. "]{") }
+    for _, c in ipairs(content) do table.insert(inlines, c) end
+    table.insert(inlines, pandoc.RawInline("tex", "}"))
+    table.insert(inlines, build_latex(comment_type, note_text, author, false, config, number))
+    return { inlines = inlines, blocks = {} }
+  end
+
+  -- Other formats: keep the text, append the note in brackets.
+  local out = pandoc.List()
+  out:extend(content)
+  if note_text ~= "" then
+    out:insert(pandoc.Str(" [" .. type_label(comment_type) .. ": " .. note_text .. "]"))
+  end
+  return { inlines = out, blocks = {} }
 end
 
 -- Exposed for the unified filter (comments.lua), the single injector of the

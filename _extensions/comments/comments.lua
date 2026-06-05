@@ -1,28 +1,26 @@
--- Unified post-quarto filter: the single rendering entry point for every comment.
+-- The single rendering filter. Input is the pandoc bracketed-span syntax:
 --
--- The shortcodes (shortcodes.lua) only emit TRANSIENT markers
--- (Span "" {.qtc-marker} data-qtc-*). This filter walks the document, hands each
--- marker to the shared renderer in comment_core.lua (utils.render), and places the
--- result. Routing all rendering here makes HTML and PDF share one code path and
--- lets a comment carry all its data in one AST node (the basis for the upcoming
--- span-input + highlight feature).
+--   []{.comment author="vg" note="…"}             -> an INSERTED comment (empty
+--                                                     bracket): margin callout, or an
+--                                                     inline badge with inline=true.
+--   [highlighted text]{.comment author="vg" note="…"}
+--                                                  -> HIGHLIGHT the text + attach the
+--                                                     note in the margin.
 --
--- Per comment, utils.render returns:
---   * an inline node (HTML inline badge, or a LaTeX RawInline \todo)  -> kept in place
---   * an HTML mid-sentence PLACEHOLDER span (.quarto-comment-hoist)   -> hoisted: an
---       in-text anchor is left behind and the margin callout is inserted as a
---       sibling block (so the host paragraph stays intact)
---   * an HTML block-context callout Div                               -> emitted as a
---       sibling block (the host paragraph, which held only the marker, is dropped)
---   * pandoc.Null (disabled / empty)                                  -> removed
+-- Type via type="comment|todo|note|question" (default comment). The filter walks the
+-- document and, for each .comment span:
+--   * EMPTY  -> utils.render (reused inserted-comment path). Its result is classified
+--       and placed: an inline node stays in place; an HTML mid-sentence placeholder is
+--       hoisted (in-text anchor + sibling margin callout); an HTML block-context
+--       callout Div becomes a sibling block; nil/disabled is dropped.
+--   * NON-EMPTY -> utils.render_highlight, which returns { inlines, blocks }: the
+--       highlighted text (the clickable anchor) stays in the flow, the margin note is
+--       collected as a sibling block.
 --
--- Preamble/asset injection: the LaTeX preamble is injected by utils.render itself
--- (it runs here, in the post-quarto filter, where quarto.doc.include_text /
--- use_latex_package work). The document-level HTML assets (Font Awesome, the anchor
--- CSS, the hover script) are injected ONCE here, deterministically, after the walk.
---
--- Registered at post-quarto (see _extension.yml) so it runs AFTER shortcode
--- expansion. Activated via `filters: [comments]`.
+-- Preamble/asset injection: the LaTeX preamble is injected by the core (it runs here,
+-- in the post-quarto filter, where quarto.doc.include_text / use_latex_package work);
+-- the document-level HTML assets (Font Awesome, anchor CSS, hover script) are injected
+-- ONCE here after the walk. Activated via `filters: [comments]`.
 
 local function core()
   local source = debug.getinfo(1, "S").source
@@ -69,6 +67,53 @@ local function is_marker(node)
   return false
 end
 
+-- A user-facing comment span: [highlighted text]{.comment author=… note=… type=…}
+-- or, empty, an inserted comment: []{.comment author=… note=…}. This is the PR2
+-- input model that replaces the shortcodes.
+local function is_comment_span(node)
+  if node.t ~= "Span" then return false end
+  for _, c in ipairs(node.classes) do
+    if c == "comment" then return true end
+  end
+  return false
+end
+
+-- Is the span the ONLY meaningful inline in its paragraph? Such a span is the
+-- span-syntax equivalent of a comment written on its own line — rendered in the
+-- block context (callout + in-text anchor) rather than hoisted mid-sentence.
+local function sole_comment_span(inlines)
+  local found = nil
+  for _, n in ipairs(inlines) do
+    local t = n.t
+    if t == "Space" or t == "SoftBreak" or t == "LineBreak" then
+      -- skip whitespace
+    elseif is_comment_span(n) and found == nil then
+      found = n
+    else
+      return nil -- some other content is present
+    end
+  end
+  return found
+end
+
+-- An empty comment span ([]{.comment …}) carries no highlighted text; it is an
+-- inserted comment. A non-empty one highlights its content.
+local function span_is_empty(node)
+  if #node.content == 0 then return true end
+  return pandoc.utils.stringify(node.content):match("^%s*$") ~= nil
+end
+
+-- Render an EMPTY comment span as an inserted comment by reconstructing the shared
+-- renderer's inputs (the note attribute is the comment text). Mirrors the old
+-- shortcode path; context (block vs mid-sentence) comes from the AST.
+local function render_comment_span(node, meta, context)
+  local a = node.attributes
+  local typ = a["type"]
+  if typ == "" then typ = nil end
+  local kwargs = { type = typ, author = a["author"], inline = a["inline"] }
+  return utils.render({ a["note"] or "" }, kwargs, meta, nil, context)
+end
+
 local function starts_with_tight_punct(node)
   return node ~= nil and node.t == "Str" and TIGHT_PUNCT[node.text:sub(1, 1)] == true
 end
@@ -110,7 +155,30 @@ end
 -- of the host paragraph) and the marker leaves either an in-text anchor (hoist) or
 -- nothing (block). Recurses into inline containers. Returns the new inline list and
 -- sets state.changed when any marker was found.
-local function process_inlines(inlines, blocks, meta, state)
+-- Place utils.render's classified return into the inline list `out` / sibling
+-- `blocks`. Shared by the marker path and the empty-comment-span path.
+local function place_rendered(result, out, blocks, drop_stranded_space, next_node)
+  local cls = classify(result)
+  if cls ~= "drop" then any_comment = true end
+  if cls == "inline" then
+    table.insert(out, result)
+  elseif cls == "hoist" then
+    table.insert(blocks, utils.build_hoisted_div(result))
+    local anchor = utils.build_anchor_from_span(result)
+    if anchor then
+      table.insert(out, anchor)
+    else
+      drop_stranded_space(next_node)
+    end
+  elseif cls == "block" then
+    table.insert(blocks, result)
+    drop_stranded_space(next_node)
+  else -- drop
+    drop_stranded_space(next_node)
+  end
+end
+
+local function process_inlines(inlines, blocks, meta, state, sole)
   local out = {}
   local function drop_stranded_space(next_node)
     if #out > 0 and out[#out].t == "Space" and starts_with_tight_punct(next_node) then
@@ -121,28 +189,29 @@ local function process_inlines(inlines, blocks, meta, state)
     local node = inlines[i]
     if is_marker(node) then
       state.changed = true
-      local result = render_marker(node, meta)
-      local cls = classify(result)
-      if cls ~= "drop" then any_comment = true end
-      if cls == "inline" then
-        table.insert(out, result)
-      elseif cls == "hoist" then
-        table.insert(blocks, utils.build_hoisted_div(result))
-        local anchor = utils.build_anchor_from_span(result)
-        if anchor then
-          table.insert(out, anchor)
+      place_rendered(render_marker(node, meta), out, blocks, drop_stranded_space, inlines[i + 1])
+    elseif is_comment_span(node) then
+      state.changed = true
+      if span_is_empty(node) then
+        -- Inserted comment. Sole-in-paragraph -> block context, else mid-sentence.
+        local context = (node == sole) and "block" or "inline"
+        place_rendered(render_comment_span(node, meta, context), out, blocks,
+          drop_stranded_space, inlines[i + 1])
+      else
+        -- Highlight + note (implemented in the next step). For now leave the
+        -- highlighted text in place as bare content so nothing is lost.
+        local res = utils.render_highlight(node.content, node.attributes, meta)
+        if res then
+          for _, n in ipairs(res.inlines or {}) do table.insert(out, n) end
+          for _, b in ipairs(res.blocks or {}) do table.insert(blocks, b) end
+          any_comment = true
         else
-          drop_stranded_space(inlines[i + 1])
+          for _, n in ipairs(node.content) do table.insert(out, n) end
         end
-      elseif cls == "block" then
-        table.insert(blocks, result)
-        drop_stranded_space(inlines[i + 1])
-      else -- drop
-        drop_stranded_space(inlines[i + 1])
       end
     else
       if node.content and INLINE_CONTAINERS[node.t] then
-        node.content = process_inlines(node.content, blocks, meta, state)
+        node.content = process_inlines(node.content, blocks, meta, state, sole)
       end
       table.insert(out, node)
     end
@@ -166,7 +235,8 @@ end
 local function handle(block, meta)
   local blocks = {}
   local state = { changed = false }
-  local new = process_inlines(block.content, blocks, meta, state)
+  local sole = sole_comment_span(block.content)
+  local new = process_inlines(block.content, blocks, meta, state, sole)
   if not state.changed then
     return nil
   end
