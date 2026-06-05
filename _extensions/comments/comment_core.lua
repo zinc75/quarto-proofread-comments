@@ -263,9 +263,14 @@ local NUMBERED_MARKER_LATEX = [[
     \edef\qtc@n{\csname qtc@num@#1\endcsname}%
     \edef\qtc@c{\csname qtc@col@#1\endcsname}%
     \begin{tikzpicture}[remember picture,overlay]%
+      % \resizebox scales the marker to <= a line. graphicx scales via \hb@xt@,
+      % which mparhack redefines for its column bookkeeping; in twocolumn that
+      % redefinition makes \resizebox here (run inside the shipout foreground) throw
+      % "Illegal unit of measure". Restore the kernel \hb@xt@ for this box only when
+      % mparhack is present (\mph@orig@hb@xt@ is its saved original).
       \node[anchor=north,inner sep=0pt] (qtc@m@#1)
         at ([yshift=-0.30\baselineskip,xshift=-0.12cm]qtc@t@#1)
-        {\resizebox{!}{0.4\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}};%
+        {\begingroup\ifdefined\mph@orig@hb@xt@\let\hb@xt@\mph@orig@hb@xt@\fi\resizebox{!}{0.4\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}\endgroup};%
       \draw[\qtc@c,line width=0.3pt,->,>=stealth,shorten >=0.5pt]
         (qtc@m@#1.north) -- (qtc@t@#1);%
     \end{tikzpicture}%
@@ -1410,16 +1415,16 @@ function utils.render(args, kwargs, meta, forced_type, context)
       quarto.doc.use_latex_package("xcolor")
       quarto.doc.use_latex_package("todonotes")
       quarto.doc.use_latex_package("fontawesome5")
-      -- mparhack fixes the classic two-sided \marginpar bug: a note anchored near a
-      -- page break can be placed on the wrong margin (then clipped by our wide
-      -- zone), which made a comment at the END of a twoside document vanish — its
-      -- box dropped, while the marker, hyperlink and list-of-todos entry stayed
-      -- correct. mparhack records each marginpar's true side in the .aux and replays
-      -- it on the next run. Loaded ONLY in single column: mparhack + todonotes +
-      -- twocolumn errors out under Quarto's rerun loop ("Illegal unit of measure",
-      -- reproducible only via Quarto, not a clean manual compile), and twocolumn
-      -- margin/side handling differs anyway. \if@twocolumn is already set by
-      -- \documentclass when this in-header line runs; guarded against a double load.
+      -- mparhack fixes the classic \marginpar side bug: a note anchored near a page
+      -- (or column) break can be placed on the wrong margin (then clipped by our
+      -- wide zone), which made a comment at the END of a twoside document vanish,
+      -- and in twocolumn dropped notes onto the text. mparhack records each
+      -- marginpar's true side in the .aux and replays it on the next run. Loaded in
+      -- BOTH one- and two-column: the twocolumn clash it used to cause ("Illegal
+      -- unit of measure" under Quarto's rerun loop) was its redefinition of
+      -- \hb@xt@ breaking the \resizebox in our shipout marker — now isolated at the
+      -- source (see \mph@orig@hb@xt@ in NUMBERED_MARKER_LATEX). Guarded vs a double
+      -- load.
       --
       -- mparhack rewrites the output routine, which can clash with other packages
       -- in an arbitrary host template (e.g. it drops a deferred \write that soulpos
@@ -1429,8 +1434,8 @@ function utils.render(args, kwargs, meta, forced_type, context)
       if config.marginpar_fix and not _latex_mparhack_injected then
         _latex_mparhack_injected = true
         quarto.doc.include_text("in-header",
-          "\\makeatletter\\@ifpackageloaded{mparhack}{}{\\if@twocolumn\\else"
-          .. "\\RequirePackage{mparhack}\\fi}\\makeatother")
+          "\\makeatletter\\@ifpackageloaded{mparhack}{}{"
+          .. "\\RequirePackage{mparhack}}\\makeatother")
       end
       if not _latex_stale_cleared then
         _latex_stale_cleared = true
