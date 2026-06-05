@@ -83,6 +83,7 @@ local _latex_bezier_injected = false
 local _latex_numbered_injected = false
 local _latex_inline_flow_injected = false
 local _latex_twocol_mpwidth_injected = false
+local _latex_mparhack_injected = false
 
 -- Global, document-order counter shared by all comments (inline and margin, both
 -- formats), so numbering never skips. Assigned once per comment in utils.render.
@@ -1395,6 +1396,22 @@ function utils.render(args, kwargs, meta, forced_type, context)
       quarto.doc.use_latex_package("xcolor")
       quarto.doc.use_latex_package("todonotes")
       quarto.doc.use_latex_package("fontawesome5")
+      -- mparhack fixes the classic two-sided \marginpar bug: a note anchored near a
+      -- page break can be placed on the wrong margin (then clipped by our wide
+      -- zone), which made a comment at the END of a twoside document vanish — its
+      -- box dropped, while the marker, hyperlink and list-of-todos entry stayed
+      -- correct. mparhack records each marginpar's true side in the .aux and replays
+      -- it on the next run. Loaded ONLY in single column: mparhack + todonotes +
+      -- twocolumn errors out under Quarto's rerun loop ("Illegal unit of measure",
+      -- reproducible only via Quarto, not a clean manual compile), and twocolumn
+      -- margin/side handling differs anyway. \if@twocolumn is already set by
+      -- \documentclass when this in-header line runs; guarded against a double load.
+      if not _latex_mparhack_injected then
+        _latex_mparhack_injected = true
+        quarto.doc.include_text("in-header",
+          "\\makeatletter\\@ifpackageloaded{mparhack}{}{\\if@twocolumn\\else"
+          .. "\\RequirePackage{mparhack}\\fi}\\makeatother")
+      end
       if not _latex_tdo_cleared then
         _latex_tdo_cleared = true
         -- Cross-platform stale .tdo removal (shell commands are not portable)
