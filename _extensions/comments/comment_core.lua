@@ -514,7 +514,7 @@ local function get_config(meta)
     show_list = false,
     connector = "numbered",
     inline_style = "flow",
-    wide_margins = false,
+    wide_margins = true,
     marginpar_fix = true,
     twocolumn_marginparwidth = "auto",
     extra_margin = "6.5cm",
