@@ -77,7 +77,7 @@ local HTML_HOVER_SCRIPT = [[
 </script>
 ]]
 local _listoftodos_injected = false
-local _latex_tdo_cleared = false
+local _latex_stale_cleared = false
 local _latex_wide_margins_injected = false
 local _latex_bezier_injected = false
 local _latex_numbered_injected = false
@@ -1412,14 +1412,25 @@ function utils.render(args, kwargs, meta, forced_type, context)
           "\\makeatletter\\@ifpackageloaded{mparhack}{}{\\if@twocolumn\\else"
           .. "\\RequirePackage{mparhack}\\fi}\\makeatother")
       end
-      if not _latex_tdo_cleared then
-        _latex_tdo_cleared = true
-        -- Cross-platform stale .tdo removal (shell commands are not portable)
+      if not _latex_stale_cleared then
+        _latex_stale_cleared = true
+        -- Remove this extension's stale auxiliary files left in the source
+        -- directory by a previous render (cross-platform; shell globbing is not
+        -- portable). Done once per render, before LaTeX runs, so the current
+        -- render regenerates them cleanly across its passes:
+        --   *.tdo          — list-of-todos table of contents
+        --   *.upa / *.upb  — soulpos position files for the flowing inline badges
+        -- (NB the files for THIS document are recreated during the LaTeX passes
+        -- that follow; this only sweeps leftovers — notably from a previous FAILED
+        -- render, which Quarto does not clean — so the directory stops
+        -- accumulating soulpos/todo aux files render after render.)
         if pandoc.system then
           local ok, files = pcall(pandoc.system.list_directory, ".")
           if ok and files then
             for _, f in ipairs(files) do
-              if f:match("%.tdo$") then os.remove(f) end
+              if f:match("%.tdo$") or f:match("%.upa$") or f:match("%.upb$") then
+                os.remove(f)
+              end
             end
           end
         end
