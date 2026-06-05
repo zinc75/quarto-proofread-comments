@@ -8,7 +8,7 @@ filters:
 extensions:
   quarto-comments:
     enabled: true
-    show_author: true
+    # show_author: true       # show the author label on each comment (default: true); set false to hide names
     show_list: true
     # connector: numbered     # in-text marker: numbered (default, clickable) | bezier (legacy line)
     # inline_style: flow      # inline comments (PDF): flow (default, soulpos badge) | box (legacy \todo[inline])
