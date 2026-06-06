@@ -22,12 +22,12 @@ Declaring reviewers and tuning the rendering via an [`extensions.quarto-proofrea
 Annotations use pandoc **bracketed-span** syntax — `[…]{.comment …}`:
 
 ```markdown
-Empty brackets INSERT a comment in the margin []{.comment by="vg" remark="A remark."}.
+Empty brackets INSERT a comment in the margin []{.comment by="te" remark="A remark."}.
 
 Wrapping text HIGHLIGHTS it and attaches the note to that span:
-[this passage]{.comment by="vg" remark="A remark about the highlighted text."}.
+[this passage]{.comment by="te" remark="A remark about the highlighted text."}.
 
-An inline badge stays in the running text []{.comment by="vg" inline=true remark="Quick aside."}.
+An inline badge stays in the running text []{.comment by="te" inline=true remark="Quick aside."}.
 ```
 
 | Attribute | Values | Description |
@@ -38,7 +38,7 @@ An inline badge stays in the running text []{.comment by="vg" inline=true remark
 | `by` | string | the reviewer; matches a key in the configuration, sets the colour and label |
 | `inline` | boolean | empty bracket only: render an inline badge instead of a margin note |
 
-- `type` and `by` are independent: a `todo` by `vg` shows the to-do icon in Vincent's colour.
+- `type` and `by` are independent: a `todo` by `te` shows the to-do icon in Telia's colour.
 - The **highlighted text** may contain maths. In PDF, prose is highlighted with a flowing marker and each formula (inline, `$$…$$`, or a system) is highlighted via a dedicated maths path — automatically, even when text and maths are mixed.
 
 ## Configuration
@@ -56,10 +56,10 @@ filters:
 extensions:
   quarto-proofread-comments:
     reviewers:
-      vg:
-        name: "Vincent"
-      cg:
-        name: "Clara"
+      te:
+        name: "Telia"
+      mi:
+        name: "Milo"
 ---
 ```
 
@@ -86,7 +86,7 @@ All options:
 
 | Comment | Display name | Colour |
 |---------|--------------|--------|
-| `by="vg"`, declared in `reviewers:` | the entry's `name:` | manual override, else auto-assigned from a Bootstrap-5 palette |
+| `by="te"`, declared in `reviewers:` | the entry's `name:` | manual override, else auto-assigned from a Bootstrap-5 palette |
 | `by="sm"`, **not** declared | `sm` (the identifier) | auto-assigned from the palette |
 | **no `by`** | *(none — label suppressed)* | **neutral grey**, regardless of `type` |
 
@@ -94,8 +94,8 @@ Auto-assignment hashes the name into the palette, so each reviewer gets a distin
 
 ```yaml
 reviewers:
-  vg:
-    name: "Vincent"
+  te:
+    name: "Telia"
     color_html: "#0072B2"
     color_latex: "blue!20"
 ```
@@ -140,9 +140,14 @@ Set `wide_margins: false` for normal page margins; `extra_margin`, `inner_pad`, 
 
 For formats other than HTML and PDF (e.g. `.docx`, EPUB), annotations fall back to plain text rather than disappearing — highlighted text is kept and the note is appended in brackets.
 
-## Example
+## Example & documentation
 
-A runnable example is included at `example.qmd`. From the repository root:
+A full **documentation site** — a feature guide (every option shown as source code
+followed by its live rendering) and a gallery of PDF layout configurations with
+thumbnails — is published at
+**<https://zinc75.github.io/quarto-proofread-comments/>**.
+
+A runnable example is also included at `example.qmd`. From the repository root:
 
 ```bash
 quarto render example.qmd --to html,pdf
