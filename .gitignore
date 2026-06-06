@@ -50,5 +50,9 @@ example.html
 example.pdf
 example.tdo
 example_files/
+docs.html
+docs.pdf
+docs.tdo
+docs_files/
 *.upa
 *.upb

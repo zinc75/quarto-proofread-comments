@@ -1,5 +1,8 @@
 ---
-title: "Quarto Proofread Comments Demo"
+title: "On the Optimal Immersion Time of a Biscuit in Hot Tea"
+subtitle: "A working draft in revision before submission — annotations shown live"
+author: "B. Crumble, E. Dunkin, P. G. Tips, G. Marchetti, and M. Halvorsen"
+date: 2026-06-06
 format:
   html: default
   pdf: default
@@ -7,67 +10,209 @@ filters:
   - proofread-comments
 extensions:
   quarto-proofread-comments:
-    enabled: true       # set false to strip all annotations for final submission
-    show_list: true     # PDF: prepend a list of all comments
-    # all options: https://github.com/zinc75/quarto-proofread-comments#configuration
+    enabled: true       # set false to strip every annotation for the final version
+    show_list: true     # PDF: prepend a clickable list of all annotations
+    list_title: "Annotations"
+    # full options: https://github.com/zinc75/quarto-proofread-comments#configuration
     reviewers:
-      vg:
-        name: "Vincent"
-      cg:
-        name: "Clara"
+      sup:                       # the supervisor / senior author — big-picture, encouraging
+        name: "Prof. Halvorsen"
+        color_html: "#0072B2"
+        color_latex: "blue!20"
+      r2:                        # John Chief, the in-house reader who still reviews like the inevitable Reviewer 2
+        name: "John Chief"
+        color_html: "#D55E00"
+        color_latex: "orange!35"
+      co:                        # the territorial co-author — declared, but with no
+        name: "Dr. Marchetti"    # explicit colour, so one is auto-assigned by name hash
+      ed:                        # the copy-editor, pointed about commas and units
+        name: "Copy-editor"
+        color_html: "#CC79A7"
+        color_latex: "magenta!25"
 ---
 
-This short document demonstrates the **Quarto Proofread Comments** extension in both HTML and PDF outputs.
-Comments use pandoc **bracketed-span** syntax: empty brackets insert a margin note []{.comment by="vg" remark="Inserted comment — empty brackets drop a note in the margin, here placed mid-sentence."}, while wrapping text [marks a span and attaches a note to it]{.comment by="vg" remark="Highlight — the bracketed text is highlighted and this note is attached to it in the margin."}.
-Set `enabled: false` in the configuration to strip all annotations for final submission.
+> This is a *fictional* manuscript in revision before submission: every coloured mark is a live
+> annotation produced by the **Quarto Proofread Comments** extension. Render it to
+> HTML and PDF to see margin callouts, flowing highlights, and inline badges in
+> context. For a feature-by-feature reference, see `docs.qmd`.
+
+## Abstract
+
+We investigate the structural failure of a biscuit[^disclaimer] subjected to
+prolonged immersion in hot tea, and derive a closed-form estimate of the *critical dunk
+time* beyond which [catastrophic structural collapse]{.comment by="r2" remark="\"Catastrophic\" is doing a lot of work here. Define the failure criterion operationally."}
+becomes [all but certain]{.comment type="todo" by="ed" remark="Hedge or quantify — \"all but certain\" is not a probability."}.
+Our model rests on capillary uptake and predicts an optimum that matches
+informal observation []{.comment type="note" by="sup" remark="Nice hook. Could you foreground the broader impact — why dunking matters — one sentence earlier?"}.
+The result is a single dimensionless group that collapses measurements taken
+across biscuit thicknesses, tea temperatures, and pore geometries onto one
+master curve.
+We further argue that the longstanding folk wisdom — that a biscuit should be
+withdrawn just before it *feels* too soft — is, to first order, quantitatively
+correct, and that the margin for error is far smaller than most tea-drinkers
+suppose.
 
 ## Introduction
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+The dunking of a biscuit is among the most widely performed yet least formally
+studied operations in applied gastrophysics.
+Estimates place the number of dunks performed worldwide each morning in the
+billions, yet the operation is governed almost entirely by intuition and
+inherited habit.
+A misjudged dunk has only two outcomes, both painfully familiar: a biscuit
+withdrawn too dry to yield any comfort, or one fragment lost irretrievably to
+the silt at the bottom of the cup.
 
-[]{.comment type="note" by="vg" remark="The dataset was last updated on 2024-11-01."}
+Prior work has treated the biscuit as a rigid body []{.comment type="question" by="co" remark="Should we cite Fisher (1999) here, or is that section mine to expand?"},
+an assumption we relax below.
+Our contribution is threefold: we formalise the failure criterion in mechanical
+terms, we derive the critical immersion time in closed form, and we test the
+prediction against a controlled three-point bending experiment.
+Throughout, we treat the biscuit not as a monolith but as a saturable porous
+solid whose stiffness degrades continuously as tea advances through it.
 
-Duis aute irure dolor in reprehenderit in voluptate velit []{.comment type="todo" by="cg" remark="Rephrase this clause before submission."} esse cillum dolore eu fugiat nulla pariatur, sunt in culpa qui officia deserunt mollit anim id est laborum.
+The central trade-off is intuitive: dunk too briefly and the biscuit stays dry
+and brittle; dunk too long []{.comment by="r2" inline="true" remark="An inline aside: the failure mode here is governed by the saturation fraction $\phi = V_\text{tea}/V_\text{pore}$, which the authors never define."}
+and it disintegrates into the cup.
+Between these regimes lies a narrow window of *optimal compliance*.
+It is the width of that window — not merely its location in time — that decides
+whether a given biscuit is forgiving or treacherous to dunk, and it is precisely
+this width that the existing folklore leaves unquantified.
 
-[]{.comment by="eb" remark="No declared author: eb is not in the authors config, so a colour is auto-assigned from a Bootstrap-5 palette — no crash, no fallback to grey."}
+## Theory
 
-Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium,
-totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+We model the biscuit as a porous medium of mean pore diameter $D$.
+Capillary uptake follows the [Washburn relation $L(t) = \sqrt{\dfrac{\gamma\,D\,t}{4\eta}}$, linking the wetted depth $L$ to immersion time $t$, surface tension $\gamma$, and viscosity $\eta$]{.comment by="co" remark="This is my derivation — please don't retune the constants without asking. The $1/4$ factor assumes a cylindrical pore."},
+from which the wetted depth grows as the square root of time.
+Two features of this relation deserve emphasis.
+First, uptake is rapid at the outset and decelerates thereafter, so the biscuit
+spends most of any realistic dunk close to saturation rather than far from it.
+Second, because $L$ depends on the square root of time, halving the immersion
+does far less than halve the wetted depth — a property that makes precise timing
+simultaneously important and unforgiving.
 
-## Model Overview
+A subtlety we at first neglected is the *angle* at which the biscuit meets the
+liquid surface.
+A biscuit held obliquely presents its pores at an angle $\varphi$ to the rising
+column, so the uptake law strictly carries a factor of $\cos\varphi$ and the
+governing grouping is really $L^2/\cos\varphi$.
+We initially set $\varphi \approx 0$, but this seemingly cosmetic term proves to
+carry more weight than its appearance suggests, and we return to it below.
 
-We summarise the modelling approach [in this section]{.comment type="question" by="cg" remark="Do we need a sensitivity analysis here?"} and refine it below.
+The biscuit fails when the wetted depth reaches the neutral axis, giving the
+boundary conditions
+[$\begin{cases} L(t^*) = h/2 \\ \sigma(t^*) = \sigma_c \end{cases}$]{.comment type="question" by="sup" remark="Does this system need an existence-and-uniqueness note, or is the monotonicity of $L$ enough to make $t^*$ well defined?"}
+where $h$ is the biscuit thickness and $\sigma_c$ the critical stress.
+Solving for the critical dunk time yields a standalone result worth stating on
+its own: [$t^* = \dfrac{\eta h^2}{\gamma D}$]{.comment type="note" by="sup" remark="Lovely — this closed form is the paper's headline. Consider boxing it in the final layout."}.
+The scaling $t^* \propto h^2$ is the practical heart of the result: a biscuit
+twice as thick tolerates roughly four times the immersion before it yields.
+Thickness, not surface area, is the lever the dunker actually controls, and it
+is the variable a thoughtful biscuit-maker might wish to specify on the packet.
 
-[]{.comment type="todo" by="cg" remark="Update parameter estimates once the latest run finishes."}
+## Method
 
-Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
-sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+Three commercial varieties spanning the porosity range were studied — Rich Tea,
+Hobnob, and Digestive — each sourced from a single batch to control for
+within-type variation and stored in a sealed container at constant humidity so
+that their dry stiffness did not drift between trials.
+Each specimen was immersed for a fixed interval and then subjected to a
+three-point bending test []{.comment type="todo" by="ed" remark="\"A fixed interval\" needs a number and a unit — state it in seconds, and mind the non-breaking space when you do (write \"7 s\", not \"7s\")."}.
+The interval was varied in fine increments around the predicted optimum, with
+several specimens tested at each setting to average over the small differences
+that survive even a carefully selected batch.
 
-Discussion continues inline []{.comment by="vg" inline="true" remark="An inline badge: maths such as the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ flows right in the running text."} while keeping the flow of the paragraph.
-Ut labore et dolore magnam aliquam quaerat voluptatem.
+[]{.comment type="note" by="co" remark="The full apparatus schematic lives in my supplementary file — link it here before submission."}
 
-A longer highlight to test wrapping: [this deliberately long highlighted passage spans several lines and contains maths $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, so we can confirm the marker flows and breaks across line boundaries cleanly]{.comment by="vg" remark="Long multi-line highlight, maths included."} and the section continues.
+Temperature was held at $85\,^\circ\mathrm{C}$ throughout, since viscosity — and
+hence the uptake rate — varies sharply with it; between trials the cup was
+refreshed to prevent dissolved solids from accumulating and quietly altering the
+surface tension over the course of a session.
+We repeated each measurement, though [the sample size was modest]{.comment by="r2" remark="\"Modest\" is an understatement. n must be reported, and frankly the authors should replicate across at least three biscuit varieties before I can recommend acceptance for submission."},
+and we report the mean response together with its standard error.
 
-## Analysis
+## Results
 
-[]{.comment type="question" remark="Should we add a sensitivity analysis section?"}
+The measured critical times cluster tightly around the predicted optimum.
+The agreement is striking []{.comment by="Janet" remark="Janet is not declared in the reviewers map, so a colour is auto-assigned from the palette — no crash, no fallback to grey."},
+and the residuals show no systematic trend with thickness, temperature, or batch.
+Across the central range of thicknesses the predicted and observed critical
+times agree to within experimental error, and the dimensionless collapse holds
+remarkably well: rescaling each specimen's response by its own $t^*$ brings the
+whole dataset onto a single trajectory, just as the theory anticipates.
 
-At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum
-deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.
+Pore radius proved the sharpest discriminator between varieties.
+Microscopy placed the coarse-pored Digestive at one extreme and the fine-pored
+Rich Tea at the other, with the Hobnob between them, and a single-parameter
+Washburn fit reproduced the measured radii with a coefficient of determination of
+$R^2 = 0.99738$ — close enough that, for routine work, the model can stand in for
+the microscope.
+The fitted radii order the capillary uptake rates exactly as the theory demands
+(Table 1).
 
-A pure formula can be highlighted on its own — Euler's identity [$e^{i\pi} + 1 = 0$]{.comment by="vg" remark="Highlighting a standalone formula uses the dedicated maths path."} — and so can a small system [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment type="question" by="cg" remark="Does this system need a uniqueness note?"} right in the text.
+| Variety   | Mean pore radius (µm) | Capillary uptake rate (×10⁻⁶ m² s⁻¹) |
+|-----------|----------------------:|-------------------------------------:|
+| Rich Tea  |                  0.30 |                                  1.1 |
+| Hobnob    |                  0.52 |                                  2.1 |
+| Digestive |                  0.80 |                                  4.2 |
 
-Similique sunt [in culpa qui officia]{.comment by="sm" remark="sm is not declared either — another auto-assigned colour."} deserunt mollitia animi, id est laborum et dolorum fuga.
-Et harum quidem rerum facilis est et expedita distinctio.
+: Fitted pore radius and capillary uptake rate for the three varieties. Values adapted from Nomerotski (2024).
+
+A deviation appears only for the thickest specimens, [where the rigid-body
+assumption breaks down and the biscuit begins to sag under its own absorbed
+mass before the bending test can be applied]{.comment type="question" by="r2" remark="This is exactly the regime I worried about. Add a figure, or this claim is unsupported."}.
+In that regime the failure is no longer a clean fracture but a slow droop, and
+the bending test — which presumes a beam stiff enough to span its supports —
+ceases to measure what we intend; we therefore exclude the three thickest
+specimens from the fit and flag them for separate treatment.
+
+[]{.comment remark="No author given: the label is suppressed and the mark is rendered in neutral grey, whatever its type. Useful for anonymous shared drafts."}
 
 ## Conclusion
 
-Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et
-voluptates repudiandae sint et molestiae non recusandae.
+A biscuit has an optimal dunk time, it is short, and it scales with the square
+of its thickness.
+The window of safety around that optimum is narrow, which explains both the
+universality of the dunking mishap and the quiet expertise of those who never
+seem to suffer one.
+We commend [moderation in all dunking]{.comment type="todo" by="sup" remark="End on the broader point — link back to the abstract's \"why it matters\"."}.
+More constructively, the square-thickness law suggests a simple operational
+rule: when in doubt, prefer a thicker biscuit dunked briefly to a thin one
+dunked in hope.
+Future work should extend the model to non-cylindrical pore networks, to the
+softening of the matrix as it warms, and to the richer problem of a biscuit
+dunked, withdrawn to drain, and then dunked once more.
+Two empirical loose ends deserve particular attention.
+The first is the dunking angle $\varphi$: our data suggest that the wetted depth
+falls as $\varphi$ grows, so a biscuit dunked beyond the conventional
+$1.1\ \mathrm{rad}$ may buy the drinker a little extra time — a prediction worth
+testing directly.
+The second is the moment of failure itself: where the present optimum is
+*inferred* from a loss of stiffness, the biscuit is in practice observed to
+crumble in under a minute, and folding that measured time-to-collapse into the
+model would close the gap between theory and the breakfast table.
 
-[]{.comment type="note" by="vg" remark="Cross-check references before submission."}
+Beyond the teacup, the same square-root kinetics govern any thin porous solid
+brought into contact with a wetting fluid — blotting paper, a sugar cube, the
+wick of an oil lamp — so the biscuit is less a curiosity than a convenient model
+system for a broad class of everyday capillary failures.
+That a problem so humble should yield so clean a law is, we think, reason enough
+to take it seriously.
+We therefore leave the reader with a single practical injunction, supported by
+our data at the $95\%$ level: dunk with conviction, but dunk briefly.
 
-Itaque earum rerum hic tenetur a sapiente delectus, ut aut reiciendis voluptatibus maiores alias
-consequatur aut perferendis doloribus asperiores repellat.
+[]{.comment type="note" by="ed" remark="Cross-check every reference and unit before the final pass."}
+
+## References
+
+1. E. W. Washburn. *The dynamics of capillary flow.* **Physical Review** 17 (3): 273–283 (1921).
+2. L. Fisher. *Physics takes the biscuit.* **Nature** 397: 469 (1999).
+3. L. Fisher. *How to Dunk a Doughnut: The Science of Everyday Life.* Penguin (2004).
+4. K. Nomerotski. *Biscuit Dunking Analysis.* (2024). Available at [k-nom.com/assets/biscuit_report.pdf](https://k-nom.com/assets/biscuit_report.pdf).
+
+[^disclaimer]: This manuscript is fictional — its narrative, data, authors and
+    reviewer annotations are invented purely to demonstrate the extension.
+    Several physical details (the Washburn model, the pore-radius ordering of
+    Rich Tea, Hobnob and Digestive, the capillary uptake rates, and the dunking
+    angle) and the references above are adapted from K. Nomerotski,
+    *Biscuit Dunking Analysis* (2024), and the works it cites.
