@@ -7,18 +7,9 @@ filters:
   - comments
 extensions:
   quarto-comments:
-    enabled: true
-    # show_author: true       # show the author label on each comment (default: true); set false to hide names
-    show_list: true
-    # connector: numbered     # in-text marker: numbered (default, clickable) | bezier (legacy line)
-    # inline_style: flow      # inline comments (PDF): flow (default, soulpos badge) | box (legacy \todo[inline])
-    # wide_margins: true      # widen the page + reserve a margin annotation zone (default: true); set false for normal page margins
-    # marginpar_fix: true     # load mparhack to fix the \marginpar side bug (default true; set false if it clashes with your document class/template)
-    # extra_margin: "6.5cm"   # width added to the page for the annotation zone (default: 6.5cm)
-    # inner_pad: "0.3cm"      # padding inside the annotation zone on each side (default: 0.3cm)
-    # frame_color: "gray!10"  # background of the annotation zone (default: gray!10)
-    # frame_line: "gray!60"   # colour of the dashed separator (default: gray!60)
-    # twocolumn_marginparwidth: "auto"  # margin-note width in twocolumn (non-wide); "auto" fits the page geometry
+    enabled: true       # set false to strip all annotations for final submission
+    show_list: true     # PDF: prepend a list of all comments
+    # all options: https://github.com/zinc75/quarto-comments#configuration
     authors:
       vg:
         name: "Vincent"
