@@ -129,10 +129,10 @@ Set `wide_margins: false` for normal page margins; `extra_margin`, `inner_pad`, 
 ### PDF / LaTeX
 
 - **Inserted comments** use [`todonotes`](https://ctan.org/pkg/todonotes) margin notes. The in-text marker is a clickable icon + number with an arrow to the insertion point (`connector: numbered`, default), or a Bézier curve (`connector: bezier`).
-- **Highlights** use the [`highlightx`](https://ctan.org/pkg/highlightx) package for a flowing marker-pen effect (prose via `soul`, formulas via a dedicated maths path). Their in-text marker is a superscript number at the end of the span, with **no arrow** — the highlight already shows the range.
+- **Highlights** get a flowing marker-pen effect built on [`soulpos`](https://ctan.org/pkg/soulpos): the slanted, hand-drawn marker is redrawn **per line fragment**, so it breaks cleanly across lines, **columns and pages**; each formula is highlighted via a dedicated `tikz` maths path. Their in-text marker is a superscript number at the end of the span, with **no arrow** — the highlight already shows the range.
 - **Inline badges** (`inline_style: flow`, default) are a flowing rounded badge (`soul`/`soulpos`); `inline_style: box` is the legacy `\todo[inline]`.
 - `show_list: true` prepends a clickable list of all comments (titled via `list_title`), numbered to match the markers.
-- Required packages (`xcolor`, `todonotes`, `fontawesome5`, `mparhack`, and `soul`/`soulpos`/`tcolorbox`/`highlightx` as needed) are injected automatically; works with pdflatex, xelatex and lualatex.
+- Required packages (`xcolor`, `todonotes`, `fontawesome5`, `mparhack`, and `soul`/`soulpos`/`tcolorbox`/`tikz` as needed) are injected automatically; works with pdflatex, xelatex and lualatex.
 
 > **Known limitation — `\marginpar` placement.** Margin notes are placed by LaTeX's `\marginpar`, which can float a note that does not fit and decides its side in the output routine. `mparhack` (loaded by default) corrects the side, but a note crowded right at a page or column break can still be displaced. In `numbered` mode the in-text marker and its link stay correct. Give notes room (`wide_margins`, on by default) or space out comments near breaks.
 

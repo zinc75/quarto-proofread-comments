@@ -383,27 +383,37 @@ local INLINE_FLOW_LATEX = [[
 ]]
 
 -- Marker-pen highlight for a highlighted span of text (the non-empty .comment span)
--- in PDF. Uses the `highlightx` package (built on soul + tikz): \HighlightText flows
--- and breaks across lines like a real highlighter. We override its shape macro with
--- a slightly slanted parallelogram and give the edge an irregular "random steps"
--- decoration (amplitude 0.85pt / segment 1.1em — the chosen look) so it reads as a
--- hand-drawn marker. highlightx loads soul itself; it coexists with soulpos (the
--- inline-flow badge) — both just reuse soul, scoped per call. Guarded once.
+-- in PDF. Built on soulpos (like the inline badge): \ulposdef runs the marker
+-- drawing PER LINE-FRAGMENT, so a highlight breaks cleanly across lines, COLUMNS
+-- and pages — each fragment gets its own slanted, random-stepped parallelogram of
+-- width \ulwidth. (highlightx, the previous backend, drew a single quad between two
+-- tikz marks and bled diagonally across a column/page break.) \ifulstarttype /
+-- \ifulendtype slant only the TRUE ends; wrapped edges stay flush so the fragments
+-- read as one continuous stroke. The maths path (\qtcHF) stays pure-tikz. soulpos is
+-- provided by INLINE_FLOW_LATEX (injected alongside via needs_soul). Guarded once.
 local HIGHLIGHT_LATEX = [[
 \makeatletter
 \ifx\qtc@highlight@done\undefined
 \gdef\qtc@highlight@done{}%
-\usepackage{highlightx}
-\usetikzlibrary{calc,decorations.pathmorphing}
+\usepackage{tikz}
+\usetikzlibrary{calc,decorations.pathmorphing,tikzmark}
+\colorlet{hlcolback}{yellow}% fallback only; callers always pass an explicit colour
 \tikzset{borderformula/.style={decorate,decoration={random steps,amplitude=0.85pt,segment length=1.1em}}}
-\renewcommand{\highlight@DoHighlight}{%
-  \pgfmathsetlengthmacro{\HLslant}{(1+4*rnd)*1pt}%
-  \pgfmathsetlengthmacro{\HLextra}{(0.9*rnd)*1pt}%
-  \fill[hlparhw]
-    ($(begin highlight)+(-\surlignparoffsetH+\HLslant,1.05*\tmp@hauteur@char+\surlignparoffsetV)$) --
-    ($(end highlight)+(\surlignparoffsetH+\HLslant+\HLextra,1.05*\tmp@hauteur@char+\surlignparoffsetV)$) --
-    ($(end highlight)+(\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) --
-    ($(begin highlight)+(-\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) -- cycle;%
+\newcommand\qtcHL[1][hlcolback]{\colorlet{qtchlc}{#1}\qtcHL@}
+\ulposdef\qtcHL@[xoffset-start=0pt]{%
+  \pgfmathsetlengthmacro{\HLs}{(1+4*rnd)*1pt}%
+  \ifulstarttype{0}{\edef\HLls{-\HLs}}{\def\HLls{0pt}}%
+  \ifulendtype{0}{\let\HLre\HLs}{\def\HLre{0pt}}%
+  \edef\HLw{\the\dimexpr\ulwidth\relax}%
+  \edef\HLtop{\the\dimexpr\ht\strutbox+0.05\ht\strutbox\relax}%
+  \edef\HLbot{-\the\dimexpr\dp\strutbox+0.05\dp\strutbox\relax}%
+  \tikz[overlay,baseline]{%
+    \fill[qtchlc,borderformula,fill opacity=0.25]
+      ($(0pt,\HLtop)+(\HLls,0pt)$) --
+      ($(\HLw,\HLtop)+(\HLre,0pt)$) --
+      (\HLw,\HLbot) --
+      (0pt,\HLbot) -- cycle;%
+  }%
 }%
 % Maths highlight (\qtcHF[colour]{maths}) drawn to MATCH the text marker: a slanted,
 % random-stepped parallelogram around the formula box, rather than \HighlightFormula's
@@ -1716,22 +1726,22 @@ function utils.render_highlight(content, attrs, meta)
   end
 
   if is_latex_format() then
-    inject_latex(config, false) -- todonotes/connector/mparhack for the margin note
+    inject_latex(config, true) -- todonotes/connector/mparhack + soul/soulpos (\qtcHL)
     if not _latex_highlight_injected then
       _latex_highlight_injected = true
       pcall(function() quarto.doc.include_text("in-header", HIGHLIGHT_LATEX) end)
     end
     local latex_color = resolve_latex_color(comment_type, author)
     local base = latex_color:match("^([^!]+)") or latex_color
-    -- highlightx marker-pen highlight: bg = the author colour (its default 0.25
-    -- opacity gives a light tint). It flows/breaks across lines. The content goes
+    -- soulpos marker-pen highlight: bg = the author colour at 0.25 opacity (a
+    -- light tint). It flows and breaks across lines, columns and pages. The content goes
     -- through soul (plain text, math and \emph/\textbf are fine; \textcolor is
     -- soul-hostile — a documented limit for highlighted text). The margin note
     -- follows as a \todo, exactly like an inserted margin comment, so it gets the
     -- same marker / number / list entry.
     -- Split the highlighted content into segments: runs of text/inline markup go
-    -- through soul via \HighlightText (which flows and breaks across lines), while
-    -- each Math node is highlighted with highlightx's dedicated \HighlightFormula
+    -- through soulpos via \qtcHL (drawn per line fragment, so it breaks across
+    -- lines/columns/pages), while each Math node is highlighted with the dedicated \qtcHF
     -- (it boxes the formula via tikz, NOT soul, so \frac, \mathbf, equation systems
     -- and display maths all work). Adjacent segments abut into one visual highlight
     -- — same author colour at the same light opacity. So the user can highlight
@@ -1751,7 +1761,7 @@ function utils.render_highlight(content, attrs, meta)
       while #run > 0 and is_space(run[#run]) do table.remove(run); trail = true end
       if lead then inlines:insert(pandoc.RawInline("tex", " ")) end
       if #run > 0 then
-        inlines:insert(pandoc.RawInline("tex", "\\HighlightText[bg=" .. base .. "]{"))
+        inlines:insert(pandoc.RawInline("tex", "\\qtcHL[" .. base .. "]{"))
         for _, n in ipairs(run) do inlines:insert(n) end
         inlines:insert(pandoc.RawInline("tex", "}"))
       end
