@@ -1,0 +1,30 @@
+---
+subtitle: "oneside · wide margins · 1 column · bezier"
+format:
+  pdf:
+    classoption: [oneside]
+extensions:
+  quarto-proofread-comments:
+    enabled: true
+    show_list: true
+    list_title: "Annotations"
+    connector: bezier
+    wide_margins: true
+    reviewers:
+      sup:
+        name: "Prof. Halvorsen"
+        color_html: "#0072B2"
+        color_latex: "blue!20"
+      r2:
+        name: "John Chief"
+        color_html: "#D55E00"
+        color_latex: "orange!35"
+      co:
+        name: "Dr. Marchetti"
+      ed:
+        name: "Copy-editor"
+        color_html: "#CC79A7"
+        color_latex: "magenta!25"
+---
+
+{{< include ../../_example-body.qmd >}}

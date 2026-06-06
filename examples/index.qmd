@@ -1,0 +1,60 @@
+---
+title: "Examples — PDF configurations"
+---
+
+The same manuscript (`example.qmd`, pulled from `main`) rendered under a few
+representative PDF configurations, so you can see how the layout options behave.
+For the interactive version with hover and links, see the
+[live HTML demo](../example.html).
+
+## Choosing your options
+
+- **The defaults are the safest combination — start here.** `connector: numbered`
+  with `wide_margins: true` handles one- and two-sided, one- and two-column, and
+  page breaks robustly.
+- **Avoid `connector: bezier` in two-column layouts.** The curved connector can
+  overflow or fail when a margin note floats across a column or page boundary;
+  the numbered marker stays correct there.
+- **Use `wide_margins: false` only with few, short annotations.** A normal-width
+  margin quickly cramps notes — long reviewer names or several stacked notes will
+  not fit. (Wide margins reserve a dedicated, roomy annotation zone.)
+- **For long comment text, use the inline form** (`inline=true`) instead of a
+  margin note, so the text flows in the body rather than overflowing a narrow
+  margin.
+
+## The configurations
+
+```{=html}
+<div class="cfg-grid">
+<div class="cfg-card">
+<div class="cfg-card-head">oneside · wide margins · 1 column · numbered <span class="cfg-badge">default</span></div>
+<a class="cfg-thumb" href="pdf/oneside-wide-1col-numbered.pdf"><img src="pdf/oneside-wide-1col-numbered.thumb.png" alt="oneside · wide margins · 1 column · numbered"></a>
+<a class="cfg-pdf" href="pdf/oneside-wide-1col-numbered.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+<div class="cfg-card">
+<div class="cfg-card-head">oneside · wide margins · 1 column · bezier</div>
+<a class="cfg-thumb" href="pdf/oneside-wide-1col-bezier.pdf"><img src="pdf/oneside-wide-1col-bezier.thumb.png" alt="oneside · wide margins · 1 column · bezier"></a>
+<a class="cfg-pdf" href="pdf/oneside-wide-1col-bezier.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+<div class="cfg-card">
+<div class="cfg-card-head">oneside · wide margins · 2 columns · numbered</div>
+<a class="cfg-thumb" href="pdf/oneside-wide-2col-numbered.pdf"><img src="pdf/oneside-wide-2col-numbered.thumb.png" alt="oneside · wide margins · 2 columns · numbered"></a>
+<a class="cfg-pdf" href="pdf/oneside-wide-2col-numbered.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+<div class="cfg-card">
+<div class="cfg-card-head">twoside · wide margins · 1 column · numbered</div>
+<a class="cfg-thumb" href="pdf/twoside-wide-1col-numbered.pdf"><img src="pdf/twoside-wide-1col-numbered.thumb.png" alt="twoside · wide margins · 1 column · numbered"></a>
+<a class="cfg-pdf" href="pdf/twoside-wide-1col-numbered.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+<div class="cfg-card">
+<div class="cfg-card-head">twoside · normal margins · 1 column · numbered</div>
+<a class="cfg-thumb" href="pdf/twoside-nonwide-1col-numbered.pdf"><img src="pdf/twoside-nonwide-1col-numbered.thumb.png" alt="twoside · normal margins · 1 column · numbered"></a>
+<a class="cfg-pdf" href="pdf/twoside-nonwide-1col-numbered.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+<div class="cfg-card">
+<div class="cfg-card-head">twoside · normal margins · 1 column · bezier</div>
+<a class="cfg-thumb" href="pdf/twoside-nonwide-1col-bezier.pdf"><img src="pdf/twoside-nonwide-1col-bezier.thumb.png" alt="twoside · normal margins · 1 column · bezier"></a>
+<a class="cfg-pdf" href="pdf/twoside-nonwide-1col-bezier.pdf"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M.5 9.5a.5.5 0 0 1 .5.5v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2a.5.5 0 0 1 1 0v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.354a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 9.793V1.5a.5.5 0 0 0-1 0v8.293L5.354 7.646a.5.5 0 1 0-.708.708l3 3z"/></svg> View PDF</a>
+</div>
+</div>
+```

@@ -1,0 +1,42 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - docs.qmd
+    - example.qmd
+    - examples/index.qmd
+    # The 16 PDF-only matrix wrappers: rendered in project context (so the
+    # root _extensions/ resolves) straight into _site/examples/pdf/.
+    - examples/pdf/*.qmd
+
+website:
+  title: "Quarto Proofread Comments"
+  repo-url: https://github.com/zinc75/quarto-proofread-comments
+  page-navigation: true
+  navbar:
+    right:
+      - icon: github
+        href: https://github.com/zinc75/quarto-proofread-comments
+        aria-label: GitHub repository
+  page-footer:
+    left: "Released under the [MIT License](https://github.com/zinc75/quarto-proofread-comments/blob/main/LICENSE)"
+    right: "[zinc75/quarto-proofread-comments](https://github.com/zinc75/quarto-proofread-comments)"
+  sidebar:
+    style: docked
+    search: true
+    contents:
+      - text: "Feature guide"
+        href: docs.qmd
+      - section: "Examples"
+        contents:
+          - text: "Live HTML demo"
+            href: example.qmd
+          - text: "PDF layout matrix"
+            href: examples/index.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-copy: true
+    css: assets/examples.css

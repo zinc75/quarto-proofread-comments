@@ -1,0 +1,11 @@
+# Shared front matter for the PDF matrix wrappers — ONLY the keys that Quarto
+# reliably merges from a directory _metadata.yml: title + author (mirroring main's
+# example.qmd; the byline carries two reviewers — Marchetti & Halvorsen — as
+# co-authors) and the filter. The extension block does NOT live here: Quarto does
+# not deep-merge the nested `extensions.quarto-proofread-comments` map, so each
+# wrapper would otherwise lose `reviewers`. gen-matrix.sh therefore writes the full
+# extension config (reviewers included) into every wrapper instead.
+title: "On the Optimal Immersion Time of a Biscuit in Hot Tea"
+author: "B. Crumble, E. Dunkin, P. G. Tips, G. Marchetti, and M. Halvorsen"
+filters:
+  - proofread-comments

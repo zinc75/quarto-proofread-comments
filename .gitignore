@@ -1,0 +1,34 @@
+# Built site
+/_site/
+/.quarto/
+
+# Injected/derived from `main` by scripts/populate.sh (single source = main)
+/_extensions/
+/example.qmd
+/_example-body.qmd
+
+# Render artefacts
+*.html
+*.pdf
+*.tex
+*.tdo
+*.log
+*.aux
+*.fls
+*.fdb_latexmk
+*.out
+*_files/
+*.upa
+*.upb
+
+# Generated thumbnails (produced in CI from the PDFs)
+examples/pdf/*.thumb.png
+
+.DS_Store
+
+**/*.quarto_ipynb
+
+# A global ~/.gitignore (home) excludes .github; re-include it here (repo rules win)
+# so the CI workflow is tracked.
+!.github/
+!.github/**

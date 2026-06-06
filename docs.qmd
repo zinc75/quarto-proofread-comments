@@ -1,0 +1,216 @@
+---
+title: "Quarto Proofread Comments — Feature Guide"
+subtitle: "Each feature shown as source, then its live rendering"
+author: "Éric Bavu"
+format:
+  html: default
+  pdf:
+    # wrap long lines inside code blocks instead of letting them overflow the page
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
+        % let long inline-code identifiers with underscores (e.g. twocolumn_marginparwidth)
+        % wrap inside narrow table cells, but only when they would otherwise overflow
+        \AtBeginDocument{\renewcommand{\_}{\textunderscore\allowbreak}}
+        % roomier table rows in this document
+        \renewcommand{\arraystretch}{1.6}
+filters:
+  - proofread-comments
+extensions:
+  quarto-proofread-comments:
+    enabled: true
+    show_list: true
+    list_title: "List of annotations on this document"
+    reviewers:
+      te: { name: "Telia" }      # no explicit colour -> auto-assigned by name hash
+      mi: { name: "Milo" }       # ditto; stable, distinct, same colour in HTML and PDF
+---
+
+This guide documents every feature of the **Quarto Proofread Comments**
+extension. Each section shows the **source you write**, followed immediately by
+its **live rendering** in this very document. Render to HTML and PDF to compare
+the two outputs. For a realistic manuscript that uses these features in context,
+see `example.qmd`.
+
+All annotations use pandoc **bracketed-span** syntax: `[…]{.comment …}`.
+
+## Setup
+
+First install the extension into your project (run once, in the project folder):
+
+```bash
+quarto add zinc75/quarto-proofread-comments
+```
+
+Then enable the bundled filter and (optionally) declare your reviewers in the
+document front matter:
+
+```yaml
+---
+title: "My Document"
+format:
+  html: default
+  pdf: default
+filters:
+  - proofread-comments
+extensions:
+  quarto-proofread-comments:
+    reviewers:
+      te: { name: "Telia" }
+      mi: { name: "Milo" }
+---
+```
+
+Everything below assumes that setup (it is exactly the front matter of this
+file).
+
+## Inserting a margin comment
+
+**Empty** brackets drop a note in the margin at that point. Use it for remarks
+that are not tied to a specific span of text.
+
+```markdown
+The estimate is robust to this choice []{.comment by="te" remark="Where does this number come from?"}.
+```
+
+The estimate is robust to this choice []{.comment by="te" remark="Where does this number come from?"}.
+A comment placed mid-sentence floats to the margin without breaking the
+paragraph, and leaves a small clickable marker in the text.
+
+## Highlighting text and attaching a note
+
+**Wrapping text** highlights it and attaches the note to that span. The
+highlight itself is the clickable anchor to its margin note.
+
+```markdown
+The model assumes [a constant growth rate over the full horizon]{.comment by="mi" remark="Is this realistic? Growth tapers in the later periods."}.
+```
+
+The model assumes [a constant growth rate over the full horizon]{.comment by="mi" remark="Is this realistic? Growth tapers in the later periods."}.
+
+A highlight may span several lines; the marker-pen effect flows and breaks
+across line boundaries cleanly.
+
+## Inline badges
+
+On an **empty** bracket, `inline=true` keeps the note *in the running text* as a
+compact badge instead of sending it to the margin. Handy for short asides.
+
+```markdown
+We adopt the usual convention []{.comment by="te" inline=true remark="Defined in Appendix A."} for the remainder of the paper.
+```
+
+We adopt the usual convention []{.comment by="te" inline=true remark="Defined in Appendix A."} for the remainder of the paper.
+
+## Comment types
+
+Set `type` to choose the icon and colour family: `comment` (default), `todo`,
+`note`, or `question`. The type is independent of the reviewer.
+
+```markdown
+A general remark []{.comment type="comment" by="te" remark="A plain comment."}.
+An action item []{.comment type="todo" by="te" remark="Rewrite this clause."}.
+An aside []{.comment type="note" by="mi" remark="Data updated 2026-06-01."}.
+An open query []{.comment type="question" by="mi" remark="Do we need a proof?"}.
+```
+
+A general remark []{.comment type="comment" by="te" remark="A plain comment."}.
+An action item []{.comment type="todo" by="te" remark="Rewrite this clause."}.
+An aside []{.comment type="note" by="mi" remark="Data updated 2026-06-01."}.
+An open query []{.comment type="question" by="mi" remark="Do we need a proof?"}.
+
+## Reviewers and colours
+
+The `by` value names the reviewer. Three cases:
+
+```markdown
+Declared reviewer []{.comment by="te" remark="Telia is in the config — uses Telia's colour and label."}.
+Undeclared reviewer []{.comment by="Janet" remark="Janet is not in the config — a colour is auto-assigned, the key is the label."}.
+No reviewer []{.comment remark="No by= at all — neutral grey, and the label is suppressed."}.
+```
+
+Declared reviewer []{.comment by="te" remark="Telia is in the config — uses Telia's colour and label."}.
+Undeclared reviewer []{.comment by="Janet" remark="Janet is not in the config — a colour is auto-assigned from the palette, the key is used as the label."}.
+No reviewer []{.comment remark="No by= at all — rendered in neutral grey, and the label is suppressed."}.
+
+To pin a colour, give a reviewer `color_html` and `color_latex`:
+
+```yaml
+reviewers:
+  te:
+    name: "Telia"
+    color_html: "#0072B2"
+    color_latex: "blue!20"
+```
+
+Otherwise a stable colour is hashed from the name, and the **same** colour is
+used in HTML and PDF.
+
+## Maths in highlights
+
+Highlighted text may contain maths — inline `$…$`, a standalone formula, or a
+system. Text is highlighted with a flowing marker; each formula is highlighted
+through a dedicated maths path, even when mixed with prose.
+
+```markdown
+Inline maths in a highlight: [the wetted depth grows as $L(t)=\sqrt{\gamma D t / 4\eta}$, the Washburn law]{.comment by="mi" remark="Cite Washburn (1921)."}.
+
+A standalone formula: [$e^{i\pi} + 1 = 0$]{.comment by="te" remark="Euler's identity, highlighted on its own."}.
+
+A system: [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment by="mi" remark="Does this need a uniqueness note?"}.
+```
+
+Inline maths in a highlight: [the wetted depth grows as $L(t)=\sqrt{\gamma D t / 4\eta}$, the Washburn law]{.comment by="mi" remark="Cite Washburn (1921)."}.
+
+A standalone formula: [$e^{i\pi} + 1 = 0$]{.comment by="te" remark="Euler's identity, highlighted on its own."}.
+
+A system: [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment by="mi" remark="Does this need a uniqueness note?"}.
+
+## Configuration options
+
+All options live under `extensions.quarto-proofread-comments`. Every one has a
+sensible default, so a minimal setup just declares reviewers.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `true` | toggle all annotations; `false` strips them entirely |
+| `show_names` | boolean | `true` | show the reviewer label on each comment |
+| `show_list` | boolean | `false` | PDF: prepend a clickable list of all comments |
+| `list_title` | string | `Annotations` | title of that list |
+| `connector` | `numbered` \| `bezier` | `numbered` | PDF marker for inserted comments |
+| `inline_style` | `flow` \| `box` | `flow` | PDF inline badges: flowing badge or legacy `\todo[inline]` |
+| `wide_margins` | boolean | `true` | widen the page and reserve a margin annotation zone |
+| `marginpar_fix` | boolean | `true` | load `mparhack` to fix the two-sided margin-side bug |
+| `extra_margin` | length | `6.5cm` | width added to the page in wide mode |
+| `inner_pad` | length | `0.3cm` | padding inside the annotation zone |
+| `frame_color` | xcolor spec | `gray!10` | background fill of the annotation zone |
+| `frame_line` | xcolor spec | `gray!60` | colour of the dashed separator line |
+| `twocolumn_marginparwidth` | length \| `auto` | `auto` | margin-note width in two-column, non-wide layouts |
+| `reviewers` | map | *(none)* | per-reviewer `name`, optional `color_html` / `color_latex` |
+
+## Producing the final version
+
+When the document is ready, set `enabled: false` in the configuration:
+
+```yaml
+extensions:
+  quarto-proofread-comments:
+    enabled: false
+```
+
+Every annotation is stripped cleanly — no margin notes, no highlights, no
+injected styles or packages. Highlighted text is kept as plain text; inserted
+comments disappear entirely. This is what you submit.
+
+## Output by format
+
+- **HTML** — margin callouts with clickable in-text anchors, flowing marker-pen
+  highlights, compact inline badges, and hover linking between an anchor and its
+  note. Styles and Font Awesome are injected automatically.
+- **PDF / LaTeX** — `todonotes` margin notes with a numbered (or Bézier) marker,
+  `highlightx` marker-pen highlights, flowing `soul`/`soulpos` inline badges, and
+  an optional list of all annotations. Required packages are injected
+  automatically; works with pdflatex, xelatex and lualatex.
+- **Other formats** (e.g. `.docx`, EPUB) — annotations fall back to plain text:
+  highlighted text is kept and the note appended in brackets.

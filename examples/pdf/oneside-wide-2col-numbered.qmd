@@ -1,0 +1,51 @@
+---
+subtitle: "oneside · wide margins · 2 columns · numbered"
+format:
+  pdf:
+    classoption: [oneside, twocolumn]
+    include-in-header:
+      text: |
+        \makeatletter
+        \let\oldlt\longtable
+        \let\endoldlt\endlongtable
+        \def\longtable{\@ifnextchar[\longtable@i \longtable@ii}
+        \def\longtable@i[#1]{\begin{figure}[h]
+        \onecolumn
+        \begin{minipage}{0.5\textwidth}
+        \oldlt[#1]
+        }
+        \def\longtable@ii{\begin{figure}[h]
+        \onecolumn
+        \begin{minipage}{0.5\textwidth}
+        \oldlt
+        }
+        \def\endlongtable{\endoldlt
+        \end{minipage}
+        \twocolumn
+        \end{figure}}
+        \makeatother
+extensions:
+  quarto-proofread-comments:
+    enabled: true
+    show_list: true
+    list_title: "Annotations"
+    connector: numbered
+    wide_margins: true
+    reviewers:
+      sup:
+        name: "Prof. Halvorsen"
+        color_html: "#0072B2"
+        color_latex: "blue!20"
+      r2:
+        name: "John Chief"
+        color_html: "#D55E00"
+        color_latex: "orange!35"
+      co:
+        name: "Dr. Marchetti"
+      ed:
+        name: "Copy-editor"
+        color_html: "#CC79A7"
+        color_latex: "magenta!25"
+---
+
+{{< include ../../_example-body.qmd >}}

@@ -1,0 +1,67 @@
+# DRAFT — finalised after Stage 2 (new repo quarto-proofread-comments).
+#
+# Builds the documentation site from the `docs` branch and deploys it to GitHub
+# Pages. The docs branch holds only the site sources; the extension, the full
+# example and the manuscript body are pulled from `main` at build time by
+# scripts/populate.sh (single source of truth = main).
+#
+# Pages settings: Settings → Pages → Build and deployment → Source = GitHub
+# Actions (no gh-pages branch needed; the built site is deployed as an artifact).
+name: Pages
+
+on:
+  push:
+    branches: [docs, main]   # docs sources OR the package itself changed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (docs branch, full history for cross-branch access)
+        uses: actions/checkout@v4
+        with:
+          ref: docs
+          fetch-depth: 0
+
+      - name: Set up Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          tinytex: true
+
+      - name: Install poppler + ImageMagick (thumbnails)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils imagemagick
+
+      - name: Populate from main (extension + example + body)
+        run: MAIN_REF=origin/main bash scripts/populate.sh
+
+      - name: Render the site (HTML pages + the PDF configurations)
+        run: quarto render
+
+      - name: Generate gallery thumbnails (from the rendered PDFs)
+        run: bash scripts/thumbs.sh _site/examples/pdf
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

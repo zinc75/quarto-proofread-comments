@@ -1,0 +1,82 @@
+/* Styled gallery cards for the Examples page (examples/index.qmd). */
+
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+@media (max-width: 720px) {
+  .cfg-grid { grid-template-columns: 1fr; }
+}
+
+.cfg-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e4e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+  transition: box-shadow 0.2s ease;
+}
+.cfg-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.cfg-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  background: #f6f8fa;
+  border-bottom: 1px solid #eceff2;
+}
+.cfg-badge {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: #2780e3;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+}
+
+/* Thumbnail (no hover zoom — it read poorly inside the card). */
+.cfg-thumb {
+  display: block;
+  background: #fbfbfb;
+}
+.cfg-thumb img {
+  width: 100%;
+  display: block;
+}
+
+/* PDF link styled as a button with an icon. */
+.cfg-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.7rem 0.85rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: #2780e3;
+  border-radius: 7px;
+  text-decoration: none;
+  width: fit-content;
+  transition: background 0.15s ease;
+}
+.cfg-pdf:hover {
+  background: #1c63b3;
+  color: #fff;
+}
+.cfg-pdf svg {
+  width: 1.05em;
+  height: 1.05em;
+  fill: currentColor;
+}
