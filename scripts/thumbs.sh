@@ -5,6 +5,7 @@
 # Click-through to the full PDF is wired in examples/index.qmd.
 #
 # Requires poppler (pdftoppm) and ImageMagick 6 or 7 (magick / convert).
+
 set -euo pipefail
 cd "$(dirname "$0")/.."   # docs root
 DIR="${1:-_site/examples/pdf}"
