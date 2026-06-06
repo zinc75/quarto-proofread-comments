@@ -59,14 +59,6 @@ local INLINE_CONTAINERS = {
 -- space is removed (e.g. "word {{< comment >}}, next").
 local TIGHT_PUNCT = { [","] = true, ["."] = true }
 
-local function is_marker(node)
-  if node.t ~= "Span" then return false end
-  for _, c in ipairs(node.classes) do
-    if c == "qtc-marker" then return true end
-  end
-  return false
-end
-
 -- A user-facing comment span: [highlighted text]{.comment author=… note=… type=…}
 -- or, empty, an inserted comment: []{.comment author=… note=…}. This is the PR2
 -- input model that replaces the shortcodes.
@@ -116,23 +108,6 @@ end
 
 local function starts_with_tight_punct(node)
   return node ~= nil and node.t == "Str" and TIGHT_PUNCT[node.text:sub(1, 1)] == true
-end
-
--- Reconstruct utils.render's inputs from a marker and call the shared renderer.
--- The type travels via kwargs.type (render resolves type/default); forced_type is
--- nil because the shortcode already folded its forced type into data-qtc-type.
-local function render_marker(node, meta)
-  local a = node.attributes
-  local typ = a["data-qtc-type"]
-  if typ == "" then typ = nil end
-  local context = a["data-qtc-context"]
-  if context == "" then context = nil end
-  local kwargs = {
-    type = typ,
-    author = a["data-qtc-author"],
-    inline = a["data-qtc-inline"],
-  }
-  return utils.render({ a["data-qtc-text"] or "" }, kwargs, meta, nil, context)
 end
 
 -- Classify utils.render's return so the caller knows how to place it.
@@ -187,10 +162,7 @@ local function process_inlines(inlines, blocks, meta, state, sole)
   end
   for i = 1, #inlines do
     local node = inlines[i]
-    if is_marker(node) then
-      state.changed = true
-      place_rendered(render_marker(node, meta), out, blocks, drop_stranded_space, inlines[i + 1])
-    elseif is_comment_span(node) then
+    if is_comment_span(node) then
       state.changed = true
       if span_is_empty(node) then
         -- Inserted comment. Sole-in-paragraph -> block context, else mid-sentence.
@@ -198,13 +170,14 @@ local function process_inlines(inlines, blocks, meta, state, sole)
         place_rendered(render_comment_span(node, meta, context), out, blocks,
           drop_stranded_space, inlines[i + 1])
       else
-        -- Highlight + note (implemented in the next step). For now leave the
-        -- highlighted text in place as bare content so nothing is lost.
+        -- Highlight + note: utils.render_highlight returns { inlines, blocks,
+        -- rendered }. `rendered` is false when comments are disabled (it returns the
+        -- bare text) — only count a real render towards the HTML asset injection.
         local res = utils.render_highlight(node.content, node.attributes, meta)
         if res then
           for _, n in ipairs(res.inlines or {}) do table.insert(out, n) end
           for _, b in ipairs(res.blocks or {}) do table.insert(blocks, b) end
-          any_comment = true
+          if res.rendered then any_comment = true end
         else
           for _, n in ipairs(node.content) do table.insert(out, n) end
         end

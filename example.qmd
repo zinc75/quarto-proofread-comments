@@ -27,7 +27,7 @@ extensions:
 ---
 
 This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs.
-Comments are inserted with shortcodes {{< comment "Consider adding a motivating example in the introduction." author="vg" >}} and render as margin callouts (HTML) or `todonotes` margin notes (PDF).
+Comments use pandoc **bracketed-span** syntax: empty brackets insert a margin note []{.comment author="vg" note="Inserted comment — empty brackets drop a note in the margin, here placed mid-sentence."}, while wrapping text [marks a span and attaches a note to it]{.comment author="vg" note="Highlight — the bracketed text is highlighted and this note is attached to it in the margin."}.
 Set `enabled: false` in the configuration to strip all annotations for final submission.
 
 ## Introduction
@@ -36,57 +36,47 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
-{{< note "The dataset was last updated on 2024-11-01." author="vg" >}}
+[]{.comment type="note" author="vg" note="The dataset was last updated on 2024-11-01."}
 
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-Excepteur sint occaecat cupidatat non proident {{< comment "This non-inline comment is placed mid-sentence (inline context). It floats into the margin as a sidenote in both HTML and PDF, and the surrounding sentence stays intact." author="eb" >}}, sunt in culpa qui officia deserunt mollit anim id est laborum.
+Duis aute irure dolor in reprehenderit in voluptate velit []{.comment type="todo" author="cg" note="Rephrase this clause before submission."} esse cillum dolore eu fugiat nulla pariatur, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-{{< comment "No author specified: the comment is anonymous — no name is displayed and the note uses the default colour for the comment type." >}}
+[]{.comment author="eb" note="No declared author: eb is not in the authors config, so a colour is auto-assigned from a Bootstrap-5 palette — no crash, no fallback to grey."}
 
 Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium,
-totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae
-dicta sunt explicabo.
+totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
 
 ## Model Overview
 
-We summarise the modelling approach in this section.
+We summarise the modelling approach [in this section]{.comment type="question" author="cg" note="Do we need a sensitivity analysis here?"} and refine it below.
 
-{{< todo "Update parameter estimates once the latest run finishes." author="cg" >}}
+[]{.comment type="todo" author="cg" note="Update parameter estimates once the latest run finishes."}
 
 Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
 sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
-Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
 
-Discussion continues inline {{< question "Do we need to cite Smith (2024) here? This is a deliberately long inline comment to test wrapping across several lines, with maths inside: the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ and Maxwell-Ampere $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, to confirm the flowing badge breaks cleanly." author="vg" inline=true >}} while keeping the flow of the paragraph.
+Discussion continues inline []{.comment author="vg" inline="true" note="An inline badge: maths such as the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ flows right in the running text."} while keeping the flow of the paragraph.
 Ut labore et dolore magnam aliquam quaerat voluptatem.
 
-{{< comment "I don't agree with this interpretation. Let's discuss." author="cg" >}}
-
-Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam,
-nisi ut aliquid ex ea commodi consequatur.
-Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur.
+A longer highlight to test wrapping: [this deliberately long highlighted passage spans several lines and contains maths $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, so we can confirm the marker flows and breaks across line boundaries cleanly]{.comment author="vg" note="Long multi-line highlight, maths included."} and the section continues.
 
 ## Analysis
 
-{{< question "Should we add a sensitivity analysis section?" author="cg" >}}
+[]{.comment type="question" note="Should we add a sensitivity analysis section?"}
 
 At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum
 deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.
 
-{{< todo "author sm is not declared in the authors config: the identifier is used as the display name and a colour is auto-assigned from the Bootstrap 5 palette — no crash, no fallback to grey." author="sm" >}}
+A pure formula can be highlighted on its own — Euler's identity [$e^{i\pi} + 1 = 0$]{.comment author="vg" note="Highlighting a standalone formula uses the dedicated maths path."} — and so can a small system [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment type="question" author="cg" note="Does this system need a uniqueness note?"} right in the text.
 
-Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.
+Similique sunt [in culpa qui officia]{.comment author="sm" note="sm is not declared either — another auto-assigned colour."} deserunt mollitia animi, id est laborum et dolorum fuga.
 Et harum quidem rerum facilis est et expedita distinctio.
-
-Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod
-maxime placeat facere possimus, omnis voluptas assumenda est, omnis dolor repellendus.
 
 ## Conclusion
 
 Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et
 voluptates repudiandae sint et molestiae non recusandae.
 
-{{< note "Cross-check references before submission." author="vg" >}}
+[]{.comment type="note" author="vg" note="Cross-check references before submission."}
 
 Itaque earum rerum hic tenetur a sapiente delectus, ut aut reiciendis voluptatibus maiores alias
 consequatur aut perferendis doloribus asperiores repellat.

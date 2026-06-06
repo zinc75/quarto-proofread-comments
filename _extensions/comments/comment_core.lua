@@ -256,6 +256,7 @@ local NUMBERED_MARKER_LATEX = [[
 \providecommand{\hypertarget}[2]{#2}\providecommand{\hyperlink}[2]{#2}%
 \providecommand{\Hy@raisedlink}[1]{#1}%
 \newcounter{qtccomment}%
+\providecommand{\qtchl}{0}% per-note flag: 1 = the comment highlights a span of text
 % Raise a jump target to the top of its line so clicking lands on the box's first
 % line, not a couple of lines lower.
 \gdef\qtcraise#1{\Hy@raisedlink{#1}}%
@@ -277,17 +278,30 @@ local NUMBERED_MARKER_LATEX = [[
   \ifx\qtc@np\qtc@curpage
     \edef\qtc@n{\csname qtc@num@#1\endcsname}%
     \edef\qtc@c{\csname qtc@col@#1\endcsname}%
+    \edef\qtc@ishl{\csname qtc@hl@#1\endcsname}%
     \begin{tikzpicture}[remember picture,overlay]%
       % \resizebox scales the marker to <= a line. graphicx scales via \hb@xt@,
       % which mparhack redefines for its column bookkeeping; in twocolumn that
       % redefinition makes \resizebox here (run inside the shipout foreground) throw
       % "Illegal unit of measure". Restore the kernel \hb@xt@ for this box only when
       % mparhack is present (\mph@orig@hb@xt@ is its saved original).
-      \node[anchor=north,inner sep=0pt] (qtc@m@#1)
-        at ([yshift=-0.30\baselineskip,xshift=-0.12cm]qtc@t@#1)
-        {\begingroup\ifdefined\mph@orig@hb@xt@\let\hb@xt@\mph@orig@hb@xt@\fi\resizebox{!}{0.4\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}\endgroup};%
-      \draw[\qtc@c,line width=0.3pt,->,>=stealth,shorten >=0.5pt]
-        (qtc@m@#1.north) -- (qtc@t@#1);%
+      \if1\qtc@ishl
+        % HIGHLIGHT: the highlighted span is already the in-text anchor, so the
+        % marker just rides on it — a small icon+number set as a superscript right at
+        % the end of the span, with NO arrow (an arrow to a single point makes no
+        % sense for a range).
+        \node[anchor=base west,inner sep=0pt] (qtc@m@#1)
+          at ([yshift=0.18\baselineskip,xshift=-0.28em]qtc@t@#1)
+          {\begingroup\ifdefined\mph@orig@hb@xt@\let\hb@xt@\mph@orig@hb@xt@\fi\resizebox{!}{0.38\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}\endgroup};%
+      \else
+        % INSERTION: icon+number just below the in-text anchor, plus a short arrow
+        % pointing up to the exact insertion point.
+        \node[anchor=north,inner sep=0pt] (qtc@m@#1)
+          at ([yshift=-0.30\baselineskip,xshift=-0.12cm]qtc@t@#1)
+          {\begingroup\ifdefined\mph@orig@hb@xt@\let\hb@xt@\mph@orig@hb@xt@\fi\resizebox{!}{0.4\baselineskip}{\hyperlink{qtc-\qtc@n}{\textcolor{\qtc@c}{\csname qtc@ico@#1\endcsname\,\textbf{\qtc@n}}}}\endgroup};%
+        \draw[\qtc@c,line width=0.3pt,->,>=stealth,shorten >=0.5pt]
+          (qtc@m@#1.north) -- (qtc@t@#1);%
+      \fi
     \end{tikzpicture}%
   \fi
 }%
@@ -305,6 +319,7 @@ local NUMBERED_MARKER_LATEX = [[
   \protected@write\@auxout{}{\string\@ifundefined{qtc@mkpagedef}{}{\string\qtc@mkpagedef{\qtc@id}{\thepage}}}%
   \global\expandafter\edef\csname qtc@num@\qtc@id\endcsname{\arabic{qtccomment}}%
   \global\expandafter\edef\csname qtc@col@\qtc@id\endcsname{\qtccol}%
+  \global\expandafter\edef\csname qtc@hl@\qtc@id\endcsname{\qtchl}%
   \global\expandafter\let\csname qtc@ico@\qtc@id\endcsname\qtcico
   \@ifundefined{qtc@q@\qtc@id}{%
     \global\expandafter\gdef\csname qtc@q@\qtc@id\endcsname{}%
@@ -390,6 +405,24 @@ local HIGHLIGHT_LATEX = [[
     ($(end highlight)+(\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) --
     ($(begin highlight)+(-\surlignparoffsetH,-1.05*\tmp@profondeur@char-\surlignparoffsetV)$) -- cycle;%
 }%
+% Maths highlight (\qtcHF[colour]{maths}) drawn to MATCH the text marker: a slanted,
+% random-stepped parallelogram around the formula box, rather than \HighlightFormula's
+% hard-coded rectangle. The formula is set inline as a node, the tinted parallelogram
+% is filled around it (0.25 opacity), and the maths is redrawn on top so it stays
+% crisp. Works for inline maths, \displaystyle and systems (no soul involved).
+\NewDocumentCommand\qtcHF{ O{hlcolback} m }{%
+  \tikzmarknode[inner sep=1pt,outer sep=0pt]{qtcF}{\ensuremath{#2}}%
+  \begin{tikzpicture}[remember picture,overlay]%
+    \pgfmathsetlengthmacro{\HLslant}{(1+4*rnd)*1pt}%
+    \pgfmathsetlengthmacro{\HLextra}{(0.9*rnd)*1pt}%
+    \fill[#1,borderformula,fill opacity=0.25]
+      ([xshift=-1pt+\HLslant,yshift=1pt]qtcF.north west) --
+      ([xshift=1pt+\HLslant+\HLextra,yshift=1pt]qtcF.north east) --
+      ([xshift=1pt,yshift=-1pt]qtcF.south east) --
+      ([xshift=-1pt,yshift=-1pt]qtcF.south west) -- cycle;%
+    \node[inner sep=1pt,outer sep=0pt] at (qtcF.center) {\ensuremath{#2}};%
+  \end{tikzpicture}%
+}%
 \fi
 \makeatother
 ]]
@@ -406,13 +439,6 @@ local DEFAULT_HTML_COLORS = {
   todo = "#D55E00",
   note = "#0072B2",
   question = "#8E44AD",
-}
-
-local DEFAULT_LATEX_COLORS = {
-  comment = "gray!20",
-  todo = "red!20",
-  note = "blue!20",
-  question = "cyan!20",
 }
 
 -- Bootstrap 5 base (-500) colors, used for auto-assigned author colors.
@@ -688,7 +714,8 @@ local function resolve_html_color(comment_type, author)
   if author then
     return "#" .. auto_color_hex(author)
   end
-  return DEFAULT_HTML_COLORS[comment_type] or DEFAULT_HTML_COLORS.comment
+  -- No author: a neutral grey regardless of the comment type (anonymous comment).
+  return DEFAULT_HTML_COLORS.comment
 end
 
 -- Returns an xcolor-compatible color name for use in LaTeX.
@@ -733,7 +760,21 @@ local function resolve_latex_color(comment_type, author)
     return color_name
   end
 
-  return DEFAULT_LATEX_COLORS[comment_type] or DEFAULT_LATEX_COLORS.comment
+  -- No author: a neutral GREY regardless of the comment type (an anonymous comment),
+  -- defined from the same hex as the HTML default so both formats match exactly.
+  local gray_hex = DEFAULT_HTML_COLORS.comment:gsub("^#", "")
+  local color_name = "qtc-anon"
+  if not _latex_colors_declared[color_name] then
+    _latex_colors_declared[color_name] = true
+    pcall(function()
+      quarto.doc.include_text("in-header",
+        "\\definecolor{" .. color_name .. "}{HTML}{" .. gray_hex .. "}\n")
+      quarto.doc.include_text("in-header",
+        "\\AtBeginDocument{\\addtocontents{tdo}{\\protect\\providecolor{"
+        .. color_name .. "}{HTML}{" .. gray_hex .. "}}}\n")
+    end)
+  end
+  return color_name
 end
 
 local function escape_latex(text)
@@ -1031,7 +1072,7 @@ function utils.build_hoisted_div(span)
   return build_html_block(comment_type, comment_text, author, html_color, config, number)
 end
 
-local function build_latex(comment_type, comment_text, author, inline, config, number)
+local function build_latex(comment_type, comment_text, author, inline, config, number, is_highlight)
   local latex_color = resolve_latex_color(comment_type, author)
   local base_color = latex_color:match("^([^!]+)") or latex_color
   -- "numbered" is the default; "bezier" reproduces the legacy connecting line and
@@ -1127,7 +1168,7 @@ local function build_latex(comment_type, comment_text, author, inline, config, n
   local content = "\\qtcraise{\\hypertarget{qtc-\\arabic{qtccomment}}{}}"
     .. icon_box .. "\\," .. num .. "\\\\" .. author_colored .. body
   local setup = "\\def\\qtccol{" .. base_color .. "}\\def\\qtcico{" .. fa_cmd
-    .. "}\\stepcounter{qtccomment}%\n"
+    .. "}\\def\\qtchl{" .. (is_highlight and "1" or "0") .. "}\\stepcounter{qtccomment}%\n"
   -- RawInline (not RawBlock): inline placement by the filter; \def/\stepcounter
   -- do not typeset, and todonotes handles the mid-paragraph \todo natively, so the
   -- host paragraph is never split (and a comment alone on its line still works).
@@ -1630,23 +1671,39 @@ function utils.render_highlight(content, attrs, meta)
     local bg = "linear-gradient(104deg, " ..
       mix(0) .. " 0.9%, " .. mix(50) .. " 2.4%, " .. mix(24) .. " 5.8%, " ..
       mix(10) .. " 93%, " .. mix(38) .. " 96%, " .. mix(0) .. " 98%)"
-    local style = table.concat({
+    -- A highlight that wraps DISPLAY maths (e.g. [$$…$$]{.comment …}, a system) is
+    -- tall; an inline background only paints the line box and leaves the maths
+    -- sticking out. Make such a highlight inline-block so the background covers the
+    -- whole formula. Text / inline-maths highlights stay display:inline with
+    -- box-decoration-break:clone so they flow and break across lines.
+    local has_display = false
+    for _, c in ipairs(content) do
+      if c.t == "Math" and c.mathtype == "DisplayMath" then has_display = true break end
+    end
+    local style_parts = {
       "--comment-color: " .. html_color,
       "background: " .. bg,
       "border-radius: 0.4rem",
-      "padding: 0.05em 0.2em",
-      "-webkit-box-decoration-break: clone",
-      "box-decoration-break: clone",
       "text-decoration: none",
       "color: inherit",
-    }, "; ") .. ";"
+    }
+    if has_display then
+      table.insert(style_parts, "display: inline-block")
+      table.insert(style_parts, "vertical-align: middle")
+      table.insert(style_parts, "padding: 0.15em 0.35em")
+    else
+      table.insert(style_parts, "padding: 0.05em 0.2em")
+      table.insert(style_parts, "-webkit-box-decoration-break: clone")
+      table.insert(style_parts, "box-decoration-break: clone")
+    end
+    local style = table.concat(style_parts, "; ") .. ";"
     local hl = pandoc.Link(content, "#qtc-" .. number, "",
       pandoc.Attr("", { "quarto-comment-highlight", "comment-" .. comment_type },
         { style = style, ["data-comment-type"] = comment_type }))
     -- Margin callout carrying the note; with_anchor=false because the highlight is
     -- already the anchor (no separate in-text icon).
     local margin = build_html_block(comment_type, note_text, author, html_color, config, number, false)
-    return { inlines = { hl }, blocks = { margin } }
+    return { inlines = { hl }, blocks = { margin }, rendered = true }
   end
 
   if is_latex_format() then
@@ -1663,11 +1720,48 @@ function utils.render_highlight(content, attrs, meta)
     -- soul-hostile — a documented limit for highlighted text). The margin note
     -- follows as a \todo, exactly like an inserted margin comment, so it gets the
     -- same marker / number / list entry.
-    local inlines = { pandoc.RawInline("tex", "\\HighlightText[bg=" .. base .. "]{") }
-    for _, c in ipairs(content) do table.insert(inlines, c) end
-    table.insert(inlines, pandoc.RawInline("tex", "}"))
-    table.insert(inlines, build_latex(comment_type, note_text, author, false, config, number))
-    return { inlines = inlines, blocks = {} }
+    -- Split the highlighted content into segments: runs of text/inline markup go
+    -- through soul via \HighlightText (which flows and breaks across lines), while
+    -- each Math node is highlighted with highlightx's dedicated \HighlightFormula
+    -- (it boxes the formula via tikz, NOT soul, so \frac, \mathbf, equation systems
+    -- and display maths all work). Adjacent segments abut into one visual highlight
+    -- — same author colour at the same light opacity. So the user can highlight
+    -- prose, an inline formula, or a whole $$…$$ system without thinking about it.
+    local inlines = pandoc.List()
+    local run = {}
+    -- Emit one text run as a \HighlightText, but with leading/trailing spaces moved
+    -- OUTSIDE the box, as ordinary source spaces between segments. Two reasons: a
+    -- space left INSIDE soul's argument right before a \qtcHF makes soul restart glued
+    -- to the formula and mis-detect the end of that line (the highlight then stops
+    -- short); and emitting the boundary space in the source preserves the original
+    -- word/formula spacing exactly.
+    local function is_space(n) return n.t == "Space" or n.t == "SoftBreak" or n.t == "LineBreak" end
+    local function flush_text()
+      local lead, trail = false, false
+      while #run > 0 and is_space(run[1]) do table.remove(run, 1); lead = true end
+      while #run > 0 and is_space(run[#run]) do table.remove(run); trail = true end
+      if lead then inlines:insert(pandoc.RawInline("tex", " ")) end
+      if #run > 0 then
+        inlines:insert(pandoc.RawInline("tex", "\\HighlightText[bg=" .. base .. "]{"))
+        for _, n in ipairs(run) do inlines:insert(n) end
+        inlines:insert(pandoc.RawInline("tex", "}"))
+      end
+      if trail then inlines:insert(pandoc.RawInline("tex", " ")) end
+      run = {}
+    end
+    for _, c in ipairs(content) do
+      if c.t == "Math" then
+        flush_text()
+        local disp = (c.mathtype == "DisplayMath") and "\\displaystyle " or ""
+        inlines:insert(pandoc.RawInline("tex",
+          "\\qtcHF[" .. base .. "]{" .. disp .. c.text .. "}"))
+      else
+        table.insert(run, c)
+      end
+    end
+    flush_text()
+    inlines:insert(build_latex(comment_type, note_text, author, false, config, number, true))
+    return { inlines = inlines, blocks = {}, rendered = true }
   end
 
   -- Other formats: keep the text, append the note in brackets.
@@ -1676,7 +1770,7 @@ function utils.render_highlight(content, attrs, meta)
   if note_text ~= "" then
     out:insert(pandoc.Str(" [" .. type_label(comment_type) .. ": " .. note_text .. "]"))
   end
-  return { inlines = out, blocks = {} }
+  return { inlines = out, blocks = {}, rendered = true }
 end
 
 -- Exposed for the unified filter (comments.lua), the single injector of the
