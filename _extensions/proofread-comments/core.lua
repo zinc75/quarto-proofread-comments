@@ -578,7 +578,7 @@ end
 local function get_config(meta)
   local config = {
     enabled = true,
-    show_author = true,
+    show_names = true,
     show_list = false,
     connector = "numbered",
     inline_style = "flow",
@@ -612,10 +612,10 @@ local function get_config(meta)
     end
   end
 
-  if config_meta.show_author ~= nil then
-    local show_author = meta_to_bool(config_meta.show_author)
-    if show_author ~= nil then
-      config.show_author = show_author
+  if config_meta.show_names ~= nil then
+    local show_names = meta_to_bool(config_meta.show_names)
+    if show_names ~= nil then
+      config.show_names = show_names
     end
   end
 
@@ -890,8 +890,8 @@ local function build_html_inline(comment_type, comment_text, author, html_color,
     "<span" .. colour_style .. ">" .. icon_html .. "</span> "))
 
   -- Author label: bold, in the author colour.
-  local show_author = config.show_author and author and author.name and author.name ~= ""
-  if show_author then
+  local show_names = config.show_names and author and author.name and author.name ~= ""
+  if show_names then
     local strong = pandoc.Strong { pandoc.Str(author.name .. ": ") }
     if html_color then
       content:insert(pandoc.Span({ strong }, pandoc.Attr("", {}, { style = "color: " .. html_color })))
@@ -941,8 +941,8 @@ local function build_html_callout(comment_type, comment_text, author, html_color
   end
 
   local icon_html = COMMENT_ICONS[comment_type] or COMMENT_ICONS.comment
-  local show_author = config.show_author and author and author.name and author.name ~= ""
-  local label_text = show_author and author.name or type_label(comment_type)
+  local show_names = config.show_names and author and author.name and author.name ~= ""
+  local label_text = show_names and author.name or type_label(comment_type)
 
   local title_inlines = pandoc.List()
   title_inlines:insert(pandoc.RawInline("html", icon_html))
@@ -1039,7 +1039,7 @@ local function build_html_inline_placeholder(comment_type, comment_text, author,
   span.classes:insert("proofread-comment-hoist")
   span.attributes["data-comment-text"] = comment_text
   span.attributes["data-comment-color"] = html_color or ""
-  span.attributes["data-comment-show-author"] = config.show_author and "true" or "false"
+  span.attributes["data-comment-show-names"] = config.show_names and "true" or "false"
   span.attributes["data-comment-number"] = number and tostring(number) or ""
   return span
 end
@@ -1067,7 +1067,7 @@ function utils.build_hoisted_div(span)
   if a["data-comment-author"] and a["data-comment-author"] ~= "" then
     author = { id = a["data-comment-author"], name = a["data-comment-author-name"] }
   end
-  local config = { show_author = (a["data-comment-show-author"] == "true") }
+  local config = { show_names = (a["data-comment-show-names"] == "true") }
   local number = a["data-comment-number"]
   if number == "" then number = nil end
   return build_html_block(comment_type, comment_text, author, html_color, config, number)
@@ -1084,12 +1084,12 @@ local function build_latex(comment_type, comment_text, author, inline, config, n
   -- lighter than a fully saturated one in print.
   local fa_cmd = LATEX_FA_ICONS[comment_type] or LATEX_FA_ICONS.comment
   local icon_box = "\\textcolor{" .. base_color .. "!70}{" .. fa_cmd .. "}"
-  local show_author = config.show_author and author and author.name and author.name ~= ""
+  local show_names = config.show_names and author and author.name and author.name ~= ""
   -- Author label: bold, in the author colour (convention shared by every type).
   -- `author_colored` is for non-soul contexts (margin, inline box, .tdo caption);
   -- `author_flow` wraps it in \mbox so the soul-hostile \textcolor survives the
   -- soulpos flow badge (the short name stays unbroken — fine).
-  local name_bold = show_author and ("\\textbf{" .. escape_latex(author.name) .. ":}") or nil
+  local name_bold = show_names and ("\\textbf{" .. escape_latex(author.name) .. ":}") or nil
   local author_colored = name_bold
     and ("\\textcolor{" .. base_color .. "}{" .. name_bold .. "} ") or ""
   local author_flow = name_bold
@@ -1217,7 +1217,7 @@ end
 -- Build the LaTeX preamble snippet that widens the page for draft margin notes.
 -- Guards against multiple injections with a LaTeX-level flag so it is safe to
 -- call once per shortcode type (up to 4 times per document).
-local function build_wide_margins_header(extra_margin, inner_pad, frame_color, frame_line)
+local function build_wide_margins_header(extra_margin, inner_pad, frame_color, frame_line, label)
   -- \makeatletter is placed OUTSIDE the \ifx guard so that \if@twoside (which
   -- requires @ to be a letter) is accessible in the guard body.
   -- \makeatother is placed AFTER \fi so it always runs regardless of branch.
@@ -1413,6 +1413,11 @@ local function build_wide_margins_header(extra_margin, inner_pad, frame_color, f
 \makeatother% outer \makeatother — always runs
 ]]
 
+  -- The grey zone's heading reuses the comment-list title (config.list_title,
+  -- default "Annotations") so the zone and the list agree. Replace the placeholder
+  -- text in the TikZ nodes (via a function so a % in the label is not magic).
+  local heading = escape_latex(label or "Annotations")
+  frame = frame:gsub("{Comments}", function() return "{" .. heading .. "}" end)
   return geom .. "\n" .. frame
 end
 
@@ -1515,7 +1520,8 @@ local function inject_latex(config, needs_soul)
           config.extra_margin,
           config.inner_pad,
           config.frame_color,
-          config.frame_line))
+          config.frame_line,
+          config.list_title))
     end
     -- Non-wide path: give todonotes a usable marginpar width in twocolumn (the wide
     -- path sets \marginparwidth itself, so this is mutually exclusive).

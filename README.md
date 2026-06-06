@@ -68,7 +68,7 @@ All options:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | boolean | `true` | toggle all annotations; `false` strips them entirely (final submission) |
-| `show_author` | boolean | `true` | show the reviewer label on each comment |
+| `show_names` | boolean | `true` | show the reviewer label on each comment |
 | `show_list` | boolean | `false` | PDF: prepend a styled, clickable list of all comments |
 | `list_title` | string | `Annotations` | title of that list |
 | `connector` | `numbered` \| `bezier` | `numbered` | PDF in-text marker for inserted comments: clickable icon + number, or a Bézier curve |
@@ -103,7 +103,7 @@ reviewers:
 ### Other settings
 
 - `enabled: false` strips every annotation (no styling, no packages, no leftover assets) for final output.
-- `show_author: false` hides the reviewer label on every comment.
+- `show_names: false` hides the reviewer label on every comment.
 - `marginpar_fix: false` skips loading `mparhack` — use it if that package clashes with your document class/template (it rewrites the LaTeX output routine, which cannot be tested against every possible template).
 
 ### Draft layout (PDF)
