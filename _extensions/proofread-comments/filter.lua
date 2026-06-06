@@ -1,9 +1,9 @@
 -- The single rendering filter. Input is the pandoc bracketed-span syntax:
 --
---   []{.comment author="vg" note="…"}             -> an INSERTED comment (empty
+--   []{.comment by="vg" remark="…"}               -> an INSERTED comment (empty
 --                                                     bracket): margin callout, or an
 --                                                     inline badge with inline=true.
---   [highlighted text]{.comment author="vg" note="…"}
+--   [highlighted text]{.comment by="vg" remark="…"}
 --                                                  -> HIGHLIGHT the text + attach the
 --                                                     note in the margin.
 --
@@ -20,7 +20,7 @@
 -- Preamble/asset injection: the LaTeX preamble is injected by the core (it runs here,
 -- in the post-quarto filter, where quarto.doc.include_text / use_latex_package work);
 -- the document-level HTML assets (Font Awesome, anchor CSS, hover script) are injected
--- ONCE here after the walk. Activated via `filters: [comments]`.
+-- ONCE here after the walk. Activated via `filters: [proofread-comments]`.
 
 local function core()
   local source = debug.getinfo(1, "S").source
@@ -28,7 +28,7 @@ local function core()
     source = source:sub(2)
   end
   local directory = source:match("(.*[/\\])") or ""
-  return dofile(directory .. "comment_core.lua")
+  return dofile(directory .. "core.lua")
 end
 
 local utils = core()
@@ -59,9 +59,8 @@ local INLINE_CONTAINERS = {
 -- space is removed (e.g. "word {{< comment >}}, next").
 local TIGHT_PUNCT = { [","] = true, ["."] = true }
 
--- A user-facing comment span: [highlighted text]{.comment author=… note=… type=…}
--- or, empty, an inserted comment: []{.comment author=… note=…}. This is the PR2
--- input model that replaces the shortcodes.
+-- A user-facing comment span: [highlighted text]{.comment by=… remark=… type=…}
+-- or, empty, an inserted comment: []{.comment by=… remark=…}.
 local function is_comment_span(node)
   if node.t ~= "Span" then return false end
   for _, c in ipairs(node.classes) do
@@ -96,14 +95,14 @@ local function span_is_empty(node)
 end
 
 -- Render an EMPTY comment span as an inserted comment by reconstructing the shared
--- renderer's inputs (the note attribute is the comment text). Mirrors the old
--- shortcode path; context (block vs mid-sentence) comes from the AST.
+-- renderer's inputs (the `remark` attribute is the comment text, `by` the reviewer).
+-- Context (block vs mid-sentence) comes from the AST.
 local function render_comment_span(node, meta, context)
   local a = node.attributes
   local typ = a["type"]
   if typ == "" then typ = nil end
-  local kwargs = { type = typ, author = a["author"], inline = a["inline"] }
-  return utils.render({ a["note"] or "" }, kwargs, meta, nil, context)
+  local kwargs = { type = typ, author = a["by"], inline = a["inline"] }
+  return utils.render({ a["remark"] or "" }, kwargs, meta, nil, context)
 end
 
 local function starts_with_tight_punct(node)
@@ -117,7 +116,7 @@ local function classify(result)
   if t == "Null" then return "drop" end
   if t == "Span" then
     for _, c in ipairs(result.classes or {}) do
-      if c == "quarto-comment-hoist" then return "hoist" end
+      if c == "proofread-comment-hoist" then return "hoist" end
     end
     return "inline"
   end

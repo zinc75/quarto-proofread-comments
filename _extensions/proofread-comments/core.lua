@@ -18,7 +18,7 @@ local FA_CSS_LINK = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/a
 -- small grow plus a thin outer ring in the author colour.
 local ANCHOR_CSS = [[
 <style>
-.quarto-comment-anchor {
+.proofread-comment-anchor {
   text-decoration: none;
   font-size: 0.8em;
   vertical-align: super;
@@ -29,34 +29,34 @@ local ANCHOR_CSS = [[
 }
 /* The icon-only line for a block-context comment: take as little vertical room
    as possible so it does not space out the surrounding paragraphs. */
-.quarto-comment-anchor-line {
+.proofread-comment-anchor-line {
   margin: 0 !important;
   line-height: 1;
 }
-.quarto-comment-anchor:hover,
-.quarto-comment-anchor.quarto-comment-hl {
+.proofread-comment-anchor:hover,
+.proofread-comment-anchor.proofread-comment-hl {
   transform: scale(1.4);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 /* A highlight (span of text with an attached note) IS its own anchor; hovering it
    (or its callout) draws a ring in the author colour. No scale — it wraps real
    text, which must not jump. */
-.quarto-comment-highlight {
+.proofread-comment-highlight {
   cursor: pointer;
   transition: box-shadow 0.12s ease-in-out;
 }
 /* Hover/link a highlight: intensify the marker itself (a uniform inset tint of the
    author colour fills it) rather than drawing a box around it, which looks wrong on
    highlighted text. box-decoration-break clones it across line fragments. */
-.quarto-comment-highlight:hover,
-.quarto-comment-highlight.quarto-comment-hl {
+.proofread-comment-highlight:hover,
+.proofread-comment-highlight.proofread-comment-hl {
   box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--comment-color, #6c757d) 22%, transparent);
 }
-.quarto-comment-block.callout {
+.proofread-comment-block.callout {
   transition: transform 0.12s ease-in-out, box-shadow 0.12s ease-in-out;
 }
-.quarto-comment-block.callout:target,
-.quarto-comment-block.callout.quarto-comment-hl {
+.proofread-comment-block.callout:target,
+.proofread-comment-block.callout.proofread-comment-hl {
   transform: scale(1.08);
   box-shadow: 0 0 0 1px var(--comment-color, #6c757d),
               0 4px 12px rgba(0, 0, 0, 0.18);
@@ -71,13 +71,13 @@ local HTML_HOVER_SCRIPT = [[
 <script>
 (function () {
   function wire() {
-    document.querySelectorAll('a.quarto-comment-anchor, a.quarto-comment-highlight').forEach(function (a) {
+    document.querySelectorAll('a.proofread-comment-anchor, a.proofread-comment-highlight').forEach(function (a) {
       var href = a.getAttribute('href') || '';
       if (href.charAt(0) !== '#') return;
       var target = document.getElementById(href.slice(1));
       if (!target) return;
-      var on = function () { target.classList.add('quarto-comment-hl'); a.classList.add('quarto-comment-hl'); };
-      var off = function () { target.classList.remove('quarto-comment-hl'); a.classList.remove('quarto-comment-hl'); };
+      var on = function () { target.classList.add('proofread-comment-hl'); a.classList.add('proofread-comment-hl'); };
+      var off = function () { target.classList.remove('proofread-comment-hl'); a.classList.remove('proofread-comment-hl'); };
       a.addEventListener('mouseenter', on);
       a.addEventListener('mouseleave', off);
       target.addEventListener('mouseenter', on);
@@ -589,19 +589,17 @@ local function get_config(meta)
     inner_pad = "0.3cm",
     frame_color = "gray!10",
     frame_line = "gray!60",
-    authors = {},
+    list_title = "Annotations",
+    reviewers = {},
   }
 
-  -- RENAME / NAMESPACE checklist (when this leaves the `quarto-comments` namespace,
-  -- e.g. -> quarto-proofread): the surfaces below are name-bound.
-  --   * THIS meta key `extensions["quarto-comments"]` — user-facing config, MUST change
-  --     (mirror the key in example.qmd / docs).
-  --   * HTML classes `quarto-comment*` (build_html_*, ANCHOR_CSS, HTML_HOVER_SCRIPT) —
-  --     user-facing CSS surface, change OK.
-  --   * LaTeX prefix `qtc` / `\qtc@…` and auto colours `cmt-…` — internal, KEEP as-is.
-  --   * Extension dir `_extensions/comments/` + filter filename — move with the dir.
-  -- The transient `qtc-marker` span (shortcode→filter) never reaches output.
-  local config_meta = meta and meta.extensions and meta.extensions["quarto-comments"]
+  -- Naming map (kept for reference; the LaTeX prefix is deliberately NOT renamed):
+  --   * meta config key  -> extensions["quarto-proofread-comments"] (user-facing)
+  --   * HTML classes      -> proofread-comment* (build_html_*, ANCHOR_CSS, HOVER script)
+  --   * LaTeX prefix `qtc` / `\qtc@…` and auto colours `cmt-…` -> KEPT (internal only,
+  --     and embedded in fragile mparhack/soulpos/highlightx machinery).
+  --   * Extension dir `_extensions/proofread-comments/`, files core.lua / filter.lua.
+  local config_meta = meta and meta.extensions and meta.extensions["quarto-proofread-comments"]
   if not config_meta then
     return config
   end
@@ -663,23 +661,26 @@ local function get_config(meta)
   if config_meta.frame_line then
     config.frame_line = meta_to_string(config_meta.frame_line)
   end
+  if config_meta.list_title then
+    config.list_title = meta_to_string(config_meta.list_title)
+  end
 
-  if config_meta.authors then
-    local authors_meta = config_meta.authors
+  if config_meta.reviewers then
+    local reviewers_meta = config_meta.reviewers
     -- MetaMap can be accessed as a table with pandoc >= 2.17
-    for author_key, author_meta in pairs(authors_meta) do
-      if type(author_meta) == "table" then
-        local author = {}
-        if author_meta.name then
-          author.name = meta_to_string(author_meta.name)
+    for reviewer_key, reviewer_meta in pairs(reviewers_meta) do
+      if type(reviewer_meta) == "table" then
+        local reviewer = {}
+        if reviewer_meta.name then
+          reviewer.name = meta_to_string(reviewer_meta.name)
         end
-        if author_meta.color_html then
-          author.color_html = meta_to_string(author_meta.color_html)
+        if reviewer_meta.color_html then
+          reviewer.color_html = meta_to_string(reviewer_meta.color_html)
         end
-        if author_meta.color_latex then
-          author.color_latex = meta_to_string(author_meta.color_latex)
+        if reviewer_meta.color_latex then
+          reviewer.color_latex = meta_to_string(reviewer_meta.color_latex)
         end
-        config.authors[author_key] = author
+        config.reviewers[reviewer_key] = reviewer
       end
     end
   end
@@ -842,7 +843,7 @@ local function parse_inlines(text)
 end
 
 local function build_html_inline(comment_type, comment_text, author, html_color, config, number)
-  local classes = { "quarto-comment", "quarto-comment-inline", "comment-" .. comment_type }
+  local classes = { "proofread-comment", "proofread-comment-inline", "comment-" .. comment_type }
   local attributes = {
     ["data-comment-type"] = comment_type,
     ["data-comment-inline"] = "true",
@@ -909,7 +910,7 @@ end
 local function build_html_callout(comment_type, comment_text, author, html_color, config, number)
   -- Build the callout classes
   local callout_classes = {
-    "quarto-comment-block",
+    "proofread-comment-block",
     "callout",
     "callout-style-default",
     CALLOUT_VARIANTS[comment_type] or CALLOUT_VARIANTS.comment,
@@ -991,7 +992,7 @@ local function build_anchor(comment_type, html_color, number)
   return pandoc.Link(
     { pandoc.RawInline("html", icon_html) },
     "#qtc-" .. number, "",
-    pandoc.Attr("", { "quarto-comment-anchor", "comment-" .. comment_type }, attrs)
+    pandoc.Attr("", { "proofread-comment-anchor", "comment-" .. comment_type }, attrs)
   )
 end
 
@@ -1016,7 +1017,7 @@ local function build_html_block(comment_type, comment_text, author, html_color, 
       -- zeroes that line's margins so it barely takes any room.
       local anchor_line = pandoc.Div(
         { pandoc.Plain({ anchor }) },
-        pandoc.Attr("", { "quarto-comment-anchor-line" })
+        pandoc.Attr("", { "proofread-comment-anchor-line" })
       )
       return pandoc.Div({ anchor_line, margin })
     end
@@ -1031,11 +1032,11 @@ end
 -- div.column-margin (the block mechanism, which works) via the companion
 -- comment-hoist.lua filter. The shortcode therefore returns a visible inline
 -- badge (graceful fallback if the filter is not active) carrying the data the
--- filter needs; the marker class quarto-comment-hoist tells the filter to
+-- filter needs; the marker class proofread-comment-hoist tells the filter to
 -- replace it with the hoisted margin callout.
 local function build_html_inline_placeholder(comment_type, comment_text, author, html_color, config, number)
   local span = build_html_inline(comment_type, comment_text, author, html_color, config, number)
-  span.classes:insert("quarto-comment-hoist")
+  span.classes:insert("proofread-comment-hoist")
   span.attributes["data-comment-text"] = comment_text
   span.attributes["data-comment-color"] = html_color or ""
   span.attributes["data-comment-show-author"] = config.show_author and "true" or "false"
@@ -1463,17 +1464,19 @@ local function inject_latex(config, needs_soul)
       _listoftodos_injected = true
       local fc = config.frame_color
       local fl = config.frame_line
+      local lt = escape_latex(config.list_title or "Annotations")
       quarto.doc.use_latex_package("tcolorbox")
       quarto.doc.include_text("in-header", "\\tcbuselibrary{skins,breakable}\n")
       -- Wrap \listoftodos in a styled tcolorbox (grey bg, dashed rounded border).
-      -- The section title is output OUTSIDE the box; only the list content
-      -- (\@starttoc{tdo}) is wrapped. Guarded against multiple injections.
+      -- The section title (config.list_title, default "Annotations") is output
+      -- OUTSIDE the box; only the list content (\@starttoc{tdo}) is wrapped. Guarded
+      -- against multiple injections.
       quarto.doc.include_text("before-body",
         "\\makeatletter\\ifx\\@qtc@listoftodos@done\\undefined" ..
         "\\gdef\\@qtc@listoftodos@done{}" ..
         "\\@ifundefined{chapter}" ..
-        "{\\section*{\\@todonotes@todolistname}}" ..
-        "{\\chapter*{\\@todonotes@todolistname}}" ..
+        "{\\section*{" .. lt .. "}}" ..
+        "{\\chapter*{" .. lt .. "}}" ..
         "\\begin{tcolorbox}[enhanced," ..
         "colback={" .. fc .. "}," ..
         "colframe=white," ..
@@ -1558,7 +1561,7 @@ function utils.render(args, kwargs, meta, forced_type, context)
   -- Resolve author
   local author = nil
   if author_id then
-    author = config.authors[author_id]
+    author = config.reviewers[author_id]
     if author then
       author = {
         id = author_id,
@@ -1632,10 +1635,10 @@ end
 -- in-text icon), reusing the numbered/hover/link machinery of inserted comments.
 function utils.render_highlight(content, attrs, meta)
   attrs = attrs or {}
-  local note_text = trim(meta_to_string(attrs.note) or "")
+  local note_text = trim(meta_to_string(attrs.remark) or "")
   local comment_type = (attrs.type and attrs.type ~= "" and tostring(attrs.type):lower()) or "comment"
   if not VALID_TYPES[comment_type] then comment_type = "comment" end
-  local author_id = attrs.author and meta_to_string(attrs.author):gsub("[^%w%-_]", "") or nil
+  local author_id = attrs.by and meta_to_string(attrs.by):gsub("[^%w%-_]", "") or nil
   if author_id == "" then author_id = nil end
 
   local config = get_config(meta)
@@ -1646,7 +1649,7 @@ function utils.render_highlight(content, attrs, meta)
 
   local author = nil
   if author_id then
-    local a = config.authors[author_id]
+    local a = config.reviewers[author_id]
     if a then
       author = { id = author_id, name = a.name or author_id,
                  color_html = a.color_html, color_latex = a.color_latex }
@@ -1698,7 +1701,7 @@ function utils.render_highlight(content, attrs, meta)
     end
     local style = table.concat(style_parts, "; ") .. ";"
     local hl = pandoc.Link(content, "#qtc-" .. number, "",
-      pandoc.Attr("", { "quarto-comment-highlight", "comment-" .. comment_type },
+      pandoc.Attr("", { "proofread-comment-highlight", "comment-" .. comment_type },
         { style = style, ["data-comment-type"] = comment_type }))
     -- Margin callout carrying the note; with_anchor=false because the highlight is
     -- already the anchor (no separate in-text icon).

@@ -1,24 +1,24 @@
 ---
-title: "Quarto Comments Demo"
+title: "Quarto Proofread Comments Demo"
 format:
   html: default
   pdf: default
 filters:
-  - comments
+  - proofread-comments
 extensions:
-  quarto-comments:
+  quarto-proofread-comments:
     enabled: true       # set false to strip all annotations for final submission
     show_list: true     # PDF: prepend a list of all comments
-    # all options: https://github.com/zinc75/quarto-comments#configuration
-    authors:
+    # all options: https://github.com/zinc75/quarto-proofread-comments#configuration
+    reviewers:
       vg:
         name: "Vincent"
       cg:
         name: "Clara"
 ---
 
-This short document demonstrates the **Quarto Comments** extension in both HTML and PDF outputs.
-Comments use pandoc **bracketed-span** syntax: empty brackets insert a margin note []{.comment author="vg" note="Inserted comment — empty brackets drop a note in the margin, here placed mid-sentence."}, while wrapping text [marks a span and attaches a note to it]{.comment author="vg" note="Highlight — the bracketed text is highlighted and this note is attached to it in the margin."}.
+This short document demonstrates the **Quarto Proofread Comments** extension in both HTML and PDF outputs.
+Comments use pandoc **bracketed-span** syntax: empty brackets insert a margin note []{.comment by="vg" remark="Inserted comment — empty brackets drop a note in the margin, here placed mid-sentence."}, while wrapping text [marks a span and attaches a note to it]{.comment by="vg" remark="Highlight — the bracketed text is highlighted and this note is attached to it in the margin."}.
 Set `enabled: false` in the configuration to strip all annotations for final submission.
 
 ## Introduction
@@ -27,39 +27,39 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
-[]{.comment type="note" author="vg" note="The dataset was last updated on 2024-11-01."}
+[]{.comment type="note" by="vg" remark="The dataset was last updated on 2024-11-01."}
 
-Duis aute irure dolor in reprehenderit in voluptate velit []{.comment type="todo" author="cg" note="Rephrase this clause before submission."} esse cillum dolore eu fugiat nulla pariatur, sunt in culpa qui officia deserunt mollit anim id est laborum.
+Duis aute irure dolor in reprehenderit in voluptate velit []{.comment type="todo" by="cg" remark="Rephrase this clause before submission."} esse cillum dolore eu fugiat nulla pariatur, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-[]{.comment author="eb" note="No declared author: eb is not in the authors config, so a colour is auto-assigned from a Bootstrap-5 palette — no crash, no fallback to grey."}
+[]{.comment by="eb" remark="No declared author: eb is not in the authors config, so a colour is auto-assigned from a Bootstrap-5 palette — no crash, no fallback to grey."}
 
 Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium,
 totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
 
 ## Model Overview
 
-We summarise the modelling approach [in this section]{.comment type="question" author="cg" note="Do we need a sensitivity analysis here?"} and refine it below.
+We summarise the modelling approach [in this section]{.comment type="question" by="cg" remark="Do we need a sensitivity analysis here?"} and refine it below.
 
-[]{.comment type="todo" author="cg" note="Update parameter estimates once the latest run finishes."}
+[]{.comment type="todo" by="cg" remark="Update parameter estimates once the latest run finishes."}
 
 Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
 sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
 
-Discussion continues inline []{.comment author="vg" inline="true" note="An inline badge: maths such as the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ flows right in the running text."} while keeping the flow of the paragraph.
+Discussion continues inline []{.comment by="vg" inline="true" remark="An inline badge: maths such as the Fourier transform $\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\,e^{-2\pi i x\xi}\,\mathrm{d}x$ flows right in the running text."} while keeping the flow of the paragraph.
 Ut labore et dolore magnam aliquam quaerat voluptatem.
 
-A longer highlight to test wrapping: [this deliberately long highlighted passage spans several lines and contains maths $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, so we can confirm the marker flows and breaks across line boundaries cleanly]{.comment author="vg" note="Long multi-line highlight, maths included."} and the section continues.
+A longer highlight to test wrapping: [this deliberately long highlighted passage spans several lines and contains maths $\nabla \times \mathbf{B} = \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}$, so we can confirm the marker flows and breaks across line boundaries cleanly]{.comment by="vg" remark="Long multi-line highlight, maths included."} and the section continues.
 
 ## Analysis
 
-[]{.comment type="question" note="Should we add a sensitivity analysis section?"}
+[]{.comment type="question" remark="Should we add a sensitivity analysis section?"}
 
 At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum
 deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.
 
-A pure formula can be highlighted on its own — Euler's identity [$e^{i\pi} + 1 = 0$]{.comment author="vg" note="Highlighting a standalone formula uses the dedicated maths path."} — and so can a small system [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment type="question" author="cg" note="Does this system need a uniqueness note?"} right in the text.
+A pure formula can be highlighted on its own — Euler's identity [$e^{i\pi} + 1 = 0$]{.comment by="vg" remark="Highlighting a standalone formula uses the dedicated maths path."} — and so can a small system [$\begin{cases} x + y = 2 \\ x - y = 0 \end{cases}$]{.comment type="question" by="cg" remark="Does this system need a uniqueness note?"} right in the text.
 
-Similique sunt [in culpa qui officia]{.comment author="sm" note="sm is not declared either — another auto-assigned colour."} deserunt mollitia animi, id est laborum et dolorum fuga.
+Similique sunt [in culpa qui officia]{.comment by="sm" remark="sm is not declared either — another auto-assigned colour."} deserunt mollitia animi, id est laborum et dolorum fuga.
 Et harum quidem rerum facilis est et expedita distinctio.
 
 ## Conclusion
@@ -67,7 +67,7 @@ Et harum quidem rerum facilis est et expedita distinctio.
 Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et
 voluptates repudiandae sint et molestiae non recusandae.
 
-[]{.comment type="note" author="vg" note="Cross-check references before submission."}
+[]{.comment type="note" by="vg" remark="Cross-check references before submission."}
 
 Itaque earum rerum hic tenetur a sapiente delectus, ut aut reiciendis voluptatibus maiores alias
 consequatur aut perferendis doloribus asperiores repellat.
