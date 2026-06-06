@@ -54,5 +54,13 @@ docs.html
 docs.pdf
 docs.tdo
 docs_files/
+
+# LaTeX build intermediates
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.tex
+
 *.upa
 *.upb
