@@ -71,22 +71,38 @@ local HTML_HOVER_SCRIPT = [[
 <script>
 (function () {
   function wire() {
-    document.querySelectorAll('a.proofread-comment-anchor, a.proofread-comment-highlight').forEach(function (a) {
-      var href = a.getAttribute('href') || '';
-      if (href.charAt(0) !== '#') return;
-      var target = document.getElementById(href.slice(1));
+    document.querySelectorAll(
+      'a.proofread-comment-anchor, a.proofread-comment-highlight'
+    ).forEach(function (a) {
+
+      const hash = a.hash;
+      if (!hash) return;
+
+      const target = document.getElementById(hash.substring(1));
       if (!target) return;
-      var on = function () { target.classList.add('proofread-comment-hl'); a.classList.add('proofread-comment-hl'); };
-      var off = function () { target.classList.remove('proofread-comment-hl'); a.classList.remove('proofread-comment-hl'); };
+
+      const on = function () {
+        target.classList.add('proofread-comment-hl');
+        a.classList.add('proofread-comment-hl');
+      };
+
+      const off = function () {
+        target.classList.remove('proofread-comment-hl');
+        a.classList.remove('proofread-comment-hl');
+      };
+
       a.addEventListener('mouseenter', on);
       a.addEventListener('mouseleave', off);
       target.addEventListener('mouseenter', on);
       target.addEventListener('mouseleave', off);
     });
   }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
-  } else { wire(); }
+  } else {
+    wire();
+  }
 })();
 </script>
 ]]
