@@ -1,5 +1,8 @@
 # Quarto Proofread Comments Extension
 
+<img width="426" height="213" alt="Quarto-proofread-comments_social_preview 001" src="https://github.com/user-attachments/assets/790b36ed-4821-418b-9a7e-16994623a398" />
+
+
 The **Quarto Proofread Comments** extension adds collaboration-friendly annotations to Quarto documents. You can **insert** a margin note anywhere, or **highlight a span of existing text and attach a note to it** — as comments, to-dos, notes, or questions. Annotations render as styled margin callouts and flowing in-text marks in HTML, as [`todonotes`](https://ctan.org/pkg/todonotes) margin notes + marker-pen highlights in PDF/LaTeX, and as plain text elsewhere. They can be toggled globally and coloured per reviewer.
 
 ## Installation
