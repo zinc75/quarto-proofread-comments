@@ -64,3 +64,8 @@ docs_files/
 
 *.upa
 *.upb
+
+# A global ~/.gitignore (home) excludes .github; re-include it so CI workflows
+# are tracked.
+!.github/
+!.github/**

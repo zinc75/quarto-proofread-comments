@@ -1,0 +1,23 @@
+# When the package (this branch, main) changes, trigger the docs site rebuild.
+# The build workflow lives on the `docs` branch, so a push to `main` would not
+# otherwise rebuild the published site (GitHub only reads workflows from the
+# branch that received the push). This dispatches docs' pages.yml, which re-pulls
+# the extension + example from main and redeploys.
+#
+# workflow_dispatch is an exception to the GITHUB_TOKEN anti-recursion rule, so the
+# built-in token is enough — no personal access token needed.
+name: Rebuild docs site
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  actions: write
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Pages workflow on the docs branch
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref docs
+        env:
+          GH_TOKEN: ${{ github.token }}
