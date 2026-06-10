@@ -1,71 +1,26 @@
-# Compiled Lua sources
-luac.out
-
-# luarocks build files
-*.src.rock
-*.zip
-*.tar.gz
-
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# macOS metadata
+# macOS
 .DS_Store
 
-
-_extensions/vgreg/
+# Quarto
 /.quarto/
 **/*.quarto_ipynb
+
+# example.qmd render outputs
 example.html
 example.pdf
-example.tdo
 example_files/
-docs.html
-docs.pdf
-docs.tdo
-docs_files/
 
-# LaTeX build intermediates
+# LaTeX build intermediates (rendering example.qmd to PDF)
 *.aux
 *.fdb_latexmk
 *.fls
 *.log
+*.out
+*.tdo
 *.tex
-
 *.upa
 *.upb
 
-# A global ~/.gitignore (home) excludes .github; re-include it so CI workflows
-# are tracked.
+# A global ~/.gitignore (home) excludes .github; re-include it so CI workflows are tracked.
 !.github/
 !.github/**
