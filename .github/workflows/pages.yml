@@ -11,8 +11,8 @@ name: Pages
 
 on:
   push:
-    branches: [docs, main]   # docs sources OR the package itself changed
-  workflow_dispatch:
+    branches: [docs]   # docs sources changed (main changes trigger this via main's rebuild-docs.yml)
+  workflow_dispatch:   # also dispatched by main's rebuild-docs.yml
 
 permissions:
   contents: read
