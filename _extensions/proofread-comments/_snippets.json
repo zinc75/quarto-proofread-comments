@@ -1,0 +1,33 @@
+{
+  "Inserted comment": {
+    "prefix": "comment",
+    "body": ["[]{.comment by=\"${1:reviewer}\" remark=\"${2:A remark.}\"}$0"],
+    "description": "Insert a margin comment (empty bracket)."
+  },
+  "Highlight and attach a note": {
+    "prefix": "comment-highlight",
+    "body": ["[${1:highlighted text}]{.comment by=\"${2:reviewer}\" remark=\"${3:A remark about it.}\"}$0"],
+    "description": "Highlight a span of text and attach a note to it."
+  },
+  "Inline comment badge": {
+    "prefix": "comment-inline",
+    "body": ["[]{.comment by=\"${1:reviewer}\" inline=true remark=\"${2:Quick aside.}\"}$0"],
+    "description": "Insert an inline comment badge that flows in the running text."
+  },
+  "Typed comment": {
+    "prefix": "comment-type",
+    "body": ["[]{.comment type=\"${1|comment,todo,note,question|}\" by=\"${2:reviewer}\" remark=\"${3:A remark.}\"}$0"],
+    "description": "Insert an annotation of a chosen type (comment / todo / note / question)."
+  },
+  "Reviewers configuration": {
+    "prefix": "comment-config",
+    "body": [
+      "extensions:",
+      "  quarto-proofread-comments:",
+      "    reviewers:",
+      "      ${1:te}: { name: \"${2:Telia}\" }",
+      "      ${3:mi}: { name: \"${4:Milo}\" }$0"
+    ],
+    "description": "Front-matter block declaring reviewers for quarto-proofread-comments."
+  }
+}

@@ -1,0 +1,104 @@
+# Quarto Wizard schema for quarto-proofread-comments.
+# Documents the `extensions.quarto-proofread-comments` config block, the `.comment`
+# span class and its attributes — for validation + autocompletion in the wizard.
+
+options:
+  enabled:
+    type: boolean
+    default: true
+    description: "Toggle all annotations; false strips them entirely (final submission)."
+  show_names:
+    type: boolean
+    default: true
+    description: "Show the reviewer label on each annotation."
+  show_list:
+    type: boolean
+    default: false
+    description: "PDF: prepend a clickable list of all annotations."
+  list_title:
+    type: string
+    default: "Annotations"
+    description: "Title of the PDF annotation list."
+  connector:
+    type: string
+    enum: [numbered, bezier]
+    default: numbered
+    description: "PDF in-text marker for inserted comments: clickable icon + number, or a Bézier curve."
+  inline_style:
+    type: string
+    enum: [flow, box]
+    default: flow
+    description: "PDF inline badges: flowing badge, or the legacy \\todo[inline] box."
+  wide_margins:
+    type: boolean
+    default: true
+    description: "Widen the page and reserve a dedicated margin annotation zone."
+  marginpar_fix:
+    type: boolean
+    default: true
+    description: "Load mparhack to fix the two-sided \\marginpar side bug; set false if it clashes with your class/template."
+  extra_margin:
+    type: string
+    default: "6.5cm"
+    description: "Width added to the page in wide-margins mode."
+  inner_pad:
+    type: string
+    default: "0.3cm"
+    description: "Padding inside the annotation zone, on each side."
+  frame_color:
+    type: string
+    default: "gray!10"
+    description: "Background fill of the annotation zone (xcolor spec)."
+    completion:
+      type: color
+  frame_line:
+    type: string
+    default: "gray!60"
+    description: "Colour of the dashed separator line (xcolor spec)."
+    completion:
+      type: color
+  twocolumn_marginparwidth:
+    type: string
+    default: "auto"
+    description: "Margin-note width in two-column, non-wide layouts (a length or auto)."
+  reviewers:
+    type: object
+    description: "Per-reviewer settings, keyed by the identifier used in by=."
+    additional-properties:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "Display name shown on the reviewer's annotations."
+        color_html:
+          type: string
+          description: "HTML accent colour (CSS hex). Auto-assigned from a palette if omitted."
+          completion:
+            type: color
+        color_latex:
+          type: string
+          description: "LaTeX/xcolor accent colour (e.g. blue!20). Auto-assigned if omitted."
+          completion:
+            type: color
+
+classes:
+  comment:
+    description: "Mark a span as a proofread annotation — [text]{.comment …}. Empty brackets insert a margin comment; wrapping text highlights it and attaches the note."
+
+attributes:
+  comment:
+    by:
+      type: string
+      description: "Reviewer identifier; matches a key in the reviewers config (sets the colour and label)."
+    remark:
+      type: string
+      description: "The annotation text shown in the margin (Markdown and $maths$ are rendered)."
+    type:
+      type: string
+      enum: [comment, todo, note, question]
+      default: comment
+      description: "Annotation kind: icon + colour family."
+    inline:
+      type: boolean
+      default: false
+      description: "Empty bracket only: render an inline badge instead of a margin note."
