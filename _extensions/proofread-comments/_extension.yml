@@ -1,14 +1,18 @@
 title: Quarto Proofread Comments
 author: "Vincent Grégoire, Éric Bavu"
-version: 1.0.0
+version: 1.0.1
 quarto-required: ">=1.5.0"
 metadata-keys:
   - extensions
 contributes:
+  # Declare the filter as a plain string (its path), NOT the object form
+  # `{ at: post-quarto, path: filter.lua }`. The object form fails YAML schema
+  # validation at `quarto add` time on older Quarto (e.g. 1.8.24:
+  # "contributes:filters:0: expected a string, received an object"), which broke
+  # installation. The `at: post-quarto` stage was only ever needed by the old
+  # shortcode pipeline (to run after shortcode expansion); with the span input
+  # model the `.comment` spans exist in the AST at every stage, so the default
+  # stage is equivalent — verified byte-for-byte identical PDF/.tex output across
+  # the full layout matrix. Keep it a plain string so it validates on Quarto 1.5+.
   filters:
-    # post-quarto: the single rendering filter. Input is the pandoc bracketed-span
-    # syntax [text]{.comment by=… remark=… type=…} (empty bracket = inserted
-    # comment, non-empty = highlight + note). The filter does all rendering and the
-    # preamble/asset injection.
-    - at: post-quarto
-      path: filter.lua
+    - filter.lua
